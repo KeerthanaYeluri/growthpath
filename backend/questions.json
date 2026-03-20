@@ -1,0 +1,272 @@
+[
+  {
+    "id": 1,
+    "topic": "Introduction",
+    "difficulty": "Easy",
+    "question": "Welcome! Let's start with a self-introduction. Tell me about yourself, your background, and what brings you to this interview today.",
+    "keywords": ["experience", "years", "testing", "automation", "team", "project", "skills", "role", "passionate", "worked"],
+    "max_score": 100,
+    "model_answer": "I'm a QA Engineer with X years of experience in both manual and automation testing. I've worked on web and API testing using tools like Selenium, Playwright, and Pytest. In my current role, I'm responsible for building and maintaining the test automation framework, writing test cases, and collaborating with developers to ensure quality. I'm passionate about test automation and continuous improvement, which is why I'm excited about this opportunity."
+  },
+  {
+    "id": 2,
+    "topic": "Python",
+    "difficulty": "Easy",
+    "question": "What are the key differences between a list and a tuple in Python? When would you use one over the other?",
+    "keywords": ["mutable", "immutable", "list", "tuple", "ordered", "index", "performance", "hashable", "change", "modify"],
+    "max_score": 100,
+    "model_answer": "A list is mutable — you can add, remove, or change elements after creation. A tuple is immutable — once created, it cannot be modified. Lists use square brackets [], tuples use parentheses (). Tuples are faster and use less memory because of their immutability. Use lists when you need to modify data (e.g., collecting test results). Use tuples for fixed data that shouldn't change (e.g., database connection configs, coordinates). Tuples can also be used as dictionary keys since they're hashable, while lists cannot."
+  },
+  {
+    "id": 3,
+    "topic": "Python",
+    "difficulty": "Medium",
+    "question": "Explain decorators in Python. Can you give an example of how you've used them in your testing framework?",
+    "keywords": ["decorator", "wrapper", "function", "@", "reusable", "logging", "retry", "fixture", "annotation", "higher-order"],
+    "max_score": 100,
+    "model_answer": "A decorator is a function that takes another function as input, adds some behavior, and returns a modified function — without changing the original function's code. It uses the @ syntax. For example, @pytest.mark.parametrize is a decorator that runs a test with multiple inputs. In my framework, I've created custom decorators like @retry(max_attempts=3) that automatically retries a flaky test, and @log_execution that logs the start/end time of each test. Decorators help keep code DRY by extracting cross-cutting concerns like logging, timing, and error handling."
+  },
+  {
+    "id": 4,
+    "topic": "Python",
+    "difficulty": "Hard",
+    "question": "Explain how Python's GIL (Global Interpreter Lock) works. How does it affect multi-threaded test execution, and what alternatives do you use?",
+    "keywords": ["GIL", "thread", "multiprocessing", "concurrency", "parallel", "lock", "CPU", "I/O", "asyncio", "subprocess"],
+    "max_score": 100,
+    "model_answer": "The GIL is a mutex in CPython that allows only one thread to execute Python bytecode at a time. This means even on multi-core machines, Python threads can't achieve true parallelism for CPU-bound tasks. However, for I/O-bound tasks (like API calls, browser waits), threads work fine because the GIL is released during I/O operations. For test execution, this means: threading works for Selenium tests (mostly I/O-bound waiting for browser), but for CPU-heavy tasks, use multiprocessing instead. Tools like pytest-xdist use subprocess-based parallelism to bypass the GIL entirely. Asyncio is another alternative for concurrent I/O operations."
+  },
+  {
+    "id": 5,
+    "topic": "Pytest",
+    "difficulty": "Easy",
+    "question": "What is Pytest and why do you prefer it over unittest? What are its main advantages?",
+    "keywords": ["fixture", "assert", "plugin", "parametrize", "discover", "simple", "marker", "conftest", "verbose", "readable"],
+    "max_score": 100,
+    "model_answer": "Pytest is a Python testing framework that makes writing tests simple and scalable. I prefer it over unittest because: 1) Simple assert statements instead of self.assertEqual/assertTrue methods. 2) Powerful fixtures with different scopes (function, class, module, session) for setup/teardown. 3) Parametrize decorator to run same test with multiple data sets. 4) Auto-discovery — finds tests automatically without boilerplate. 5) Rich plugin ecosystem (pytest-html, pytest-xdist, pytest-cov). 6) conftest.py for shared fixtures. 7) Better error messages with detailed assertion introspection."
+  },
+  {
+    "id": 6,
+    "topic": "Pytest",
+    "difficulty": "Medium",
+    "question": "Explain Pytest fixtures in detail. What are fixture scopes, and how do you use conftest.py for shared fixtures?",
+    "keywords": ["fixture", "scope", "session", "module", "function", "conftest", "yield", "setup", "teardown", "autouse", "shared"],
+    "max_score": 100,
+    "model_answer": "Fixtures are reusable setup/teardown functions decorated with @pytest.fixture. Scopes control how often a fixture runs: 'function' (default) runs per test, 'class' per class, 'module' per file, 'session' runs once for entire test suite. Use yield for setup + teardown — code before yield is setup, after yield is teardown. conftest.py is a special file where you define shared fixtures accessible to all tests in that directory and subdirectories without importing. autouse=True makes a fixture run automatically for every test. Example: a session-scoped browser fixture in conftest.py creates one browser for all tests."
+  },
+  {
+    "id": 7,
+    "topic": "Pytest",
+    "difficulty": "Hard",
+    "question": "How do you implement parallel test execution in Pytest? Explain pytest-xdist and how you handle shared state between parallel workers.",
+    "keywords": ["xdist", "parallel", "worker", "-n", "distributed", "isolation", "fixture", "scope", "session", "lock", "tmp_path"],
+    "max_score": 100,
+    "model_answer": "pytest-xdist enables parallel test execution using multiple processes. Use 'pytest -n auto' to use all CPU cores, or '-n 4' for 4 workers. Each worker is an independent subprocess, so they don't share memory. Challenges: 1) Session-scoped fixtures run once PER worker, not globally — use FileLock from filelock library for one-time setup. 2) Database conflicts — each worker needs isolated test data or separate DB schemas. 3) Test ordering — tests must be independent with no dependencies. 4) Shared resources — use tmp_path_factory with locks for shared files. 5) Reporting — results are collected from all workers and merged. The key principle: design tests to be fully isolated."
+  },
+  {
+    "id": 8,
+    "topic": "Playwright",
+    "difficulty": "Easy",
+    "question": "What is Playwright and how does it compare to Selenium? What are the key advantages of using Playwright for test automation?",
+    "keywords": ["browser", "chromium", "firefox", "webkit", "auto-wait", "selector", "headless", "fast", "reliable", "cross-browser", "microsoft"],
+    "max_score": 100,
+    "model_answer": "Playwright is a browser automation framework by Microsoft that supports Chromium, Firefox, and WebKit. Key advantages over Selenium: 1) Auto-waiting — automatically waits for elements to be actionable before interacting. 2) Built-in assertions with retry logic. 3) Network interception — mock APIs, block requests. 4) Multiple browser contexts — test in isolation without separate browser instances. 5) Trace viewer for debugging. 6) Native support for iframes, shadow DOM, file uploads. 7) Faster execution — uses DevTools Protocol directly instead of WebDriver. 8) Built-in test runner with parallel execution. It's more reliable with less flaky tests."
+  },
+  {
+    "id": 9,
+    "topic": "Playwright",
+    "difficulty": "Medium",
+    "question": "Explain Playwright's auto-waiting mechanism. How does it handle dynamic content, and how do you use locators effectively?",
+    "keywords": ["auto-wait", "locator", "get_by_role", "get_by_text", "visible", "attached", "enabled", "timeout", "retry", "actionability"],
+    "max_score": 100,
+    "model_answer": "Playwright auto-waits before every action by checking actionability: the element must be attached to DOM, visible, stable (not animating), enabled, and not obscured. This eliminates most explicit waits. For locators: prefer user-facing attributes — get_by_role('button', name='Submit'), get_by_text('Login'), get_by_label('Email'). These are resilient to code changes. Avoid CSS/XPath when possible. For dynamic content: use locator.wait_for() with state='visible' or 'attached'. Locators are lazy — they don't find elements until an action is performed, so they auto-retry on DOM changes. Custom timeout: locator.click(timeout=10000)."
+  },
+  {
+    "id": 10,
+    "topic": "Playwright",
+    "difficulty": "Hard",
+    "question": "How do you implement API mocking and network interception in Playwright? Describe a real scenario where you used route handlers.",
+    "keywords": ["route", "mock", "intercept", "fulfill", "abort", "request", "response", "API", "network", "handler", "page.route"],
+    "max_score": 100,
+    "model_answer": "Use page.route() to intercept network requests. Three actions: fulfill (return mock response), abort (block request), continue (modify and forward). Example scenario: Testing error handling — I mocked the /api/users endpoint to return 500 error: page.route('**/api/users', lambda route: route.fulfill(status=500, body='Server Error')). This let me test the UI error state without breaking the real API. Another use: blocking third-party analytics/ads to speed up tests. For modifying requests: route.continue_(headers={...}) to add auth tokens. You can also intercept responses to modify data before it reaches the page."
+  },
+  {
+    "id": 11,
+    "topic": "Java",
+    "difficulty": "Easy",
+    "question": "What are the core OOP principles in Java? How do you apply them in your test automation framework?",
+    "keywords": ["encapsulation", "inheritance", "polymorphism", "abstraction", "class", "object", "interface", "extends", "implements", "page object"],
+    "max_score": 100,
+    "model_answer": "Four OOP principles: 1) Encapsulation — Page Object Model encapsulates page elements and actions in a class. Private locators, public methods. 2) Inheritance — BasePage class with common methods (click, type, wait) that all page classes extend. 3) Polymorphism — Same method name behaves differently based on the page (e.g., navigate() in LoginPage vs DashboardPage). 4) Abstraction — Abstract BasePage defines the contract (abstract methods like getPageTitle) that child pages must implement. This makes the framework maintainable, reusable, and follows the DRY principle."
+  },
+  {
+    "id": 12,
+    "topic": "Java",
+    "difficulty": "Medium",
+    "question": "Explain the difference between abstract classes and interfaces in Java. When would you use each in a test framework?",
+    "keywords": ["abstract", "interface", "implement", "extend", "method", "contract", "multiple", "default", "base", "page", "reusable"],
+    "max_score": 100,
+    "model_answer": "Abstract class: can have both abstract and concrete methods, instance variables, constructors. A class can extend only one abstract class. Use for: BasePage with shared implementation (common click/wait methods + abstract methods like isPageLoaded). Interface: defines a contract with method signatures only (Java 8+ allows default methods). A class can implement multiple interfaces. Use for: defining capabilities like Scrollable, Searchable that different pages can implement independently. Key difference: abstract class = 'is-a' relationship with shared code; interface = 'can-do' contract for behavior. In testing: BasePage as abstract class, IPage/ISearchable as interfaces."
+  },
+  {
+    "id": 13,
+    "topic": "Java",
+    "difficulty": "Hard",
+    "question": "How does Java handle memory management and garbage collection? How can memory leaks affect long-running test suites?",
+    "keywords": ["heap", "stack", "garbage", "collector", "GC", "memory", "leak", "reference", "strong", "weak", "OutOfMemory", "profiler"],
+    "max_score": 100,
+    "model_answer": "Java uses automatic memory management. Stack stores method calls and local variables (LIFO). Heap stores objects. Garbage Collector (GC) automatically frees heap memory for unreferenced objects. GC types: Serial, Parallel, G1, ZGC. In test suites: memory leaks happen when WebDriver instances aren't properly closed, when large data structures accumulate across tests, or when event listeners aren't removed. Symptoms: tests slow down over time, eventually OutOfMemoryError. Solutions: always close browsers in @AfterMethod, use WeakReferences for caches, set appropriate -Xmx heap size, use profilers like VisualVM or JProfiler to detect leaks. Static references are a common leak source."
+  },
+  {
+    "id": 14,
+    "topic": "Selenium",
+    "difficulty": "Easy",
+    "question": "Explain the Selenium WebDriver architecture. How does a command travel from your test code to the browser?",
+    "keywords": ["WebDriver", "browser", "driver", "HTTP", "JSON", "wire", "protocol", "ChromeDriver", "server", "client", "command"],
+    "max_score": 100,
+    "model_answer": "Selenium WebDriver follows a client-server architecture using the W3C WebDriver Protocol. Flow: 1) Your test code (Java/Python client) creates a command (e.g., click). 2) The client library converts it to an HTTP request (JSON over REST). 3) The request goes to the browser-specific driver (ChromeDriver, GeckoDriver). 4) The driver translates it to browser-native commands. 5) The browser executes the action. 6) The response travels back the same path. ChromeDriver uses Chrome DevTools Protocol internally. Each driver is a standalone server that listens on a port. The JSON Wire Protocol (legacy) / W3C Protocol handles the communication."
+  },
+  {
+    "id": 15,
+    "topic": "Selenium",
+    "difficulty": "Medium",
+    "question": "What are implicit waits, explicit waits, and fluent waits in Selenium? When should you use each type?",
+    "keywords": ["implicit", "explicit", "fluent", "WebDriverWait", "ExpectedConditions", "timeout", "polling", "NoSuchElement", "visibility", "clickable"],
+    "max_score": 100,
+    "model_answer": "Implicit Wait: set once on driver, applies globally to all element lookups. driver.implicitly_wait(10) — waits up to 10 seconds before throwing NoSuchElementException. Simple but not flexible. Explicit Wait: uses WebDriverWait with ExpectedConditions for specific conditions. WebDriverWait(driver, 10).until(EC.visibility_of_element_located(locator)). Best for most scenarios — wait for specific element states. Fluent Wait: like explicit but with custom polling interval and exception ignoring. Useful for elements that load unpredictably. Best practice: avoid implicit waits (they slow tests), use explicit waits for specific conditions. Never mix implicit and explicit — causes unpredictable timeouts."
+  },
+  {
+    "id": 16,
+    "topic": "Selenium",
+    "difficulty": "Hard",
+    "question": "How do you design a robust Page Object Model framework in Selenium? How do you handle dynamic elements and StaleElementReferenceException?",
+    "keywords": ["POM", "page object", "factory", "stale", "element", "retry", "dynamic", "locator", "encapsulation", "reusable", "base page", "wrapper"],
+    "max_score": 100,
+    "model_answer": "POM Design: BasePage class with common utilities (click, type, wait, screenshot). Each page is a separate class with private locators and public action methods. PageFactory for lazy element initialization. Key principles: methods return the next page object for fluent navigation. For StaleElementReferenceException: happens when DOM is re-rendered after you've found an element. Solutions: 1) Re-find the element — wrap actions in a retry method that catches StaleException and re-locates. 2) Use explicit waits before interacting. 3) Avoid storing element references — use locators (By objects) instead and find fresh each time. For dynamic elements: use dynamic XPath/CSS with parameters, or use contains/starts-with functions."
+  },
+  {
+    "id": 17,
+    "topic": "API Testing",
+    "difficulty": "Easy",
+    "question": "What are the different HTTP methods? Explain the difference between PUT and PATCH with examples.",
+    "keywords": ["GET", "POST", "PUT", "PATCH", "DELETE", "idempotent", "update", "partial", "full", "resource", "status code", "REST"],
+    "max_score": 100,
+    "model_answer": "HTTP Methods: GET (retrieve data), POST (create new resource), PUT (full update/replace), PATCH (partial update), DELETE (remove resource). PUT vs PATCH: PUT replaces the entire resource — you must send all fields. Example: PUT /users/1 with {name: 'John', email: 'john@test.com', age: 30} replaces everything. PATCH updates only specified fields. Example: PATCH /users/1 with {age: 31} only updates age, keeping name and email unchanged. PUT is idempotent (same result every time). PATCH may or may not be idempotent. Other methods: HEAD (like GET but no body), OPTIONS (supported methods)."
+  },
+  {
+    "id": 18,
+    "topic": "API Testing",
+    "difficulty": "Medium",
+    "question": "How do you validate API responses in your tests? What do you check beyond just the status code?",
+    "keywords": ["status", "body", "schema", "header", "response time", "JSON", "validation", "contract", "field", "type", "null", "assertion"],
+    "max_score": 100,
+    "model_answer": "Beyond status codes, I validate: 1) Response body — correct data values, field presence, data types. 2) JSON Schema validation — structure matches the contract (using jsonschema library). 3) Headers — Content-Type, Cache-Control, CORS headers. 4) Response time — should be under SLA threshold (e.g., < 500ms). 5) Pagination — correct page size, total count, next/prev links. 6) Error responses — proper error codes, messages, format. 7) Null handling — required fields aren't null. 8) Data integrity — created/updated records actually persist. 9) Edge cases — empty arrays, special characters, large payloads. I use assert libraries and custom validators for comprehensive checks."
+  },
+  {
+    "id": 19,
+    "topic": "API Testing",
+    "difficulty": "Hard",
+    "question": "How do you test API authentication and authorization? Explain how you handle OAuth2 tokens, refresh flows, and role-based access in your test suite.",
+    "keywords": ["OAuth", "token", "bearer", "refresh", "authorization", "authentication", "role", "permission", "JWT", "header", "401", "403", "scope"],
+    "max_score": 100,
+    "model_answer": "Authentication testing: 1) Verify 401 for missing/invalid tokens. 2) Test token expiry and refresh flow — get access token, wait for expiry, use refresh token to get new access token. 3) Test invalid refresh tokens return 401. Authorization testing: 1) Role-based access — admin can DELETE, viewer cannot (expect 403). 2) Test each endpoint with different roles. 3) Test resource-level permissions (user A can't access user B's data). OAuth2 flow in tests: use a pre-test fixture to authenticate via client_credentials or password grant, store token, inject as Bearer header. For JWT: decode and verify claims (exp, iss, aud, scopes). Store tokens in session-scoped fixtures to avoid re-authenticating per test."
+  },
+  {
+    "id": 20,
+    "topic": "UI Testing",
+    "difficulty": "Easy",
+    "question": "What is the difference between functional testing and visual regression testing for UI? What tools have you used?",
+    "keywords": ["functional", "visual", "regression", "screenshot", "pixel", "comparison", "layout", "Percy", "Applitools", "CSS", "responsive"],
+    "max_score": 100,
+    "model_answer": "Functional testing verifies that UI elements work correctly — buttons click, forms submit, navigation works, data displays properly. It tests behavior and logic. Visual regression testing compares screenshots to detect unintended visual changes — CSS shifts, layout breaks, font changes, color differences. It tests appearance. Tools: Functional — Selenium, Playwright, Cypress. Visual — Percy (BrowserStack), Applitools Eyes, Playwright's built-in screenshot comparison (toHaveScreenshot), BackstopJS. Best practice: use both together. Functional tests catch broken features, visual tests catch broken layouts. Visual tests are especially important for responsive design across screen sizes."
+  },
+  {
+    "id": 21,
+    "topic": "UI Testing",
+    "difficulty": "Medium",
+    "question": "How do you handle cross-browser testing challenges? What are the most common issues and how do you solve them?",
+    "keywords": ["cross-browser", "Chrome", "Firefox", "Safari", "Edge", "CSS", "rendering", "compatibility", "polyfill", "grid", "BrowserStack", "responsive"],
+    "max_score": 100,
+    "model_answer": "Common cross-browser issues: 1) CSS rendering differences — flexbox/grid behave differently in Safari. Solution: use CSS resets, vendor prefixes, test on real browsers. 2) JavaScript API differences — some APIs aren't supported in older browsers. Solution: polyfills, feature detection. 3) Date/time formatting varies by browser. 4) File upload dialogs differ. My approach: run core tests on Chrome (fast feedback), run full suite on Chrome + Firefox + Safari/WebKit before releases. Use Playwright (supports all 3 natively) or BrowserStack/Selenium Grid for real device testing. Maintain a browser compatibility matrix. Focus cross-browser testing on UI-heavy pages."
+  },
+  {
+    "id": 22,
+    "topic": "UI Testing",
+    "difficulty": "Hard",
+    "question": "How do you test complex UI components like drag-and-drop, file uploads, iframes, and shadow DOM? Walk me through your approach.",
+    "keywords": ["drag", "drop", "iframe", "shadow", "DOM", "file", "upload", "action", "chain", "switch", "frame", "JavaScript", "execute", "pierce"],
+    "max_score": 100,
+    "model_answer": "Drag-and-drop: In Selenium, use ActionChains — click_and_hold(source).move_to_element(target).release(). In Playwright, use locator.drag_to(target). For HTML5 drag-drop, may need JavaScript execution. File uploads: use element.send_keys('/path/to/file') on the input[type=file] element. In Playwright: page.set_input_files('input', 'file.pdf'). Iframes: In Selenium, driver.switch_to.frame(iframe_element), perform actions, then switch_to.default_content(). Playwright handles frames with frame_locator('iframe').locator('button'). Shadow DOM: Selenium can't pierce shadow DOM natively — use JavaScript: driver.execute_script('return element.shadowRoot'). Playwright supports piercing with >> css=.shadow-element."
+  },
+  {
+    "id": 23,
+    "topic": "Locust",
+    "difficulty": "Easy",
+    "question": "What is Locust and how does it differ from other performance testing tools like JMeter? Why would you choose Locust?",
+    "keywords": ["Locust", "Python", "performance", "load", "JMeter", "code", "scalable", "distributed", "user", "swarm", "request", "lightweight"],
+    "max_score": 100,
+    "model_answer": "Locust is a Python-based open-source load testing tool. Key differences from JMeter: 1) Tests are written in Python code, not XML/GUI — more flexible, version-controllable. 2) Lightweight — Locust uses coroutines (gevent), JMeter uses threads (heavier). 3) Better scalability — easily distribute across multiple machines. 4) Built-in web UI for real-time monitoring. 5) Easy to integrate with CI/CD. Why choose Locust: if your team knows Python, want code-based tests, need easy distributed testing, or want lightweight resource usage. JMeter is better for: non-programmers (GUI-based), protocol variety (JMS, LDAP), existing JMX scripts."
+  },
+  {
+    "id": 24,
+    "topic": "Locust",
+    "difficulty": "Medium",
+    "question": "How do you write a Locust test file? Explain the User class, task decorator, and how you define wait times between requests.",
+    "keywords": ["HttpUser", "task", "@task", "wait_time", "between", "host", "on_start", "client", "get", "post", "weight", "TaskSet"],
+    "max_score": 100,
+    "model_answer": "A Locust file defines user behavior: class MyUser(HttpUser) — inherits HttpUser for HTTP testing. host = 'https://api.example.com' — target URL. wait_time = between(1, 3) — random wait 1-3 seconds between tasks (simulates real user think time). @task decorator marks methods as user tasks. @task(3) gives higher weight (runs 3x more often). on_start() runs once per user (login, setup). Inside tasks: self.client.get('/api/users'), self.client.post('/api/login', json={...}). The client auto-tracks response times and failures. Example: one user might have @task browse_products, @task add_to_cart, @task checkout with different weights."
+  },
+  {
+    "id": 25,
+    "topic": "Locust",
+    "difficulty": "Hard",
+    "question": "How do you run distributed load tests with Locust? Explain master-worker architecture and how you analyze results to find bottlenecks.",
+    "keywords": ["master", "worker", "distributed", "RPS", "response time", "percentile", "95th", "bottleneck", "CPU", "memory", "throughput", "failure rate"],
+    "max_score": 100,
+    "model_answer": "Distributed setup: Start master with 'locust --master', workers with 'locust --worker --master-host=IP'. Master coordinates, workers generate load. Each worker simulates a portion of total users. Analysis: Key metrics — RPS (requests/sec), response time percentiles (median, 95th, 99th), failure rate. Finding bottlenecks: 1) If response time increases linearly with users — server CPU/memory bottleneck. 2) If errors spike at certain RPS — connection limits or thread pool exhaustion. 3) High 95th percentile with low median — specific slow queries or endpoints. 4) Use server monitoring (CPU, memory, DB connections) alongside Locust. Export CSV results for detailed analysis. Set SLAs: 95th percentile < 2s, error rate < 1%."
+  },
+  {
+    "id": 26,
+    "topic": "Manual Testing",
+    "difficulty": "Easy",
+    "question": "What is the difference between smoke testing, sanity testing, and regression testing? When do you perform each?",
+    "keywords": ["smoke", "sanity", "regression", "build", "critical", "subset", "full", "release", "deploy", "basic", "functionality", "stable"],
+    "max_score": 100,
+    "model_answer": "Smoke Testing: A quick, high-level check that critical functionalities work after a new build. 'Does the app launch? Can users login? Does the main flow work?' Performed on every new build. If smoke fails, build is rejected. Sanity Testing: A narrow, focused check on specific functionality after a bug fix or minor change. 'Did the fix for login actually work? Did it break anything nearby?' Not exhaustive. Regression Testing: Comprehensive re-execution of existing test cases to ensure new changes haven't broken existing features. Performed before releases. Most time-consuming — often automated. Order: Smoke (first) → Sanity (after fixes) → Regression (before release)."
+  },
+  {
+    "id": 27,
+    "topic": "Manual Testing",
+    "difficulty": "Medium",
+    "question": "How do you write effective test cases? What makes a good test case, and how do you ensure coverage without redundancy?",
+    "keywords": ["test case", "steps", "expected", "actual", "precondition", "coverage", "boundary", "equivalence", "partition", "traceability", "requirement"],
+    "max_score": 100,
+    "model_answer": "A good test case has: clear title, preconditions, step-by-step instructions, expected results, and test data. Techniques for coverage: 1) Equivalence Partitioning — divide inputs into valid/invalid groups, test one from each. 2) Boundary Value Analysis — test at edges (min, max, min-1, max+1). 3) Decision Tables — cover all combinations of conditions. 4) Requirements Traceability Matrix — map each requirement to test cases to ensure nothing is missed. Avoid redundancy: review test cases for overlap, use risk-based prioritization (test critical paths more), combine tests that verify related functionality. Each test should have one clear objective — if it fails, you know exactly what's broken."
+  },
+  {
+    "id": 28,
+    "topic": "Manual Testing",
+    "difficulty": "Hard",
+    "question": "Explain your approach to exploratory testing. How do you document findings, and how does it complement scripted testing?",
+    "keywords": ["exploratory", "charter", "session", "notes", "heuristic", "risk", "intuition", "unscripted", "edge case", "bug", "report", "time-boxed"],
+    "max_score": 100,
+    "model_answer": "Exploratory testing is simultaneous learning, test design, and execution. My approach: 1) Create a charter — 'Explore the checkout flow focusing on payment edge cases for 30 minutes.' 2) Time-box sessions (30-60 min) to stay focused. 3) Use heuristics like SFDPOT (Structure, Function, Data, Platform, Operations, Time) to guide exploration. 4) Document as I go — notes, screenshots, screen recordings. 5) Log bugs immediately with reproduction steps. How it complements scripted testing: scripted tests verify known requirements, exploratory testing finds unexpected issues — edge cases, usability problems, integration gaps that scripts don't cover. I typically do exploratory testing on new features and areas with recent changes."
+  },
+  {
+    "id": 29,
+    "topic": "Behavioral",
+    "difficulty": "Medium",
+    "question": "Tell me about a time you found a critical bug just before a release. How did you handle it, and what was the outcome?",
+    "keywords": ["bug", "critical", "release", "communicate", "team", "priority", "fix", "risk", "decision", "stakeholder", "impact", "resolved"],
+    "max_score": 100,
+    "model_answer": "Use the STAR method: Situation — During regression testing before a major release, I discovered that the payment processing was silently failing for a specific card type. Task — I needed to escalate this quickly as release was planned for the next morning. Action — I immediately documented the bug with reproduction steps, impact analysis (affected ~15% of users), and notified the tech lead and product manager. We had an emergency triage call, decided to delay the release by one day. I worked with the developer to verify the fix, ran targeted regression, and confirmed it was resolved. Result — The fix was deployed successfully, preventing potential revenue loss and customer complaints. We also added automated tests for all card types to prevent recurrence."
+  },
+  {
+    "id": 30,
+    "topic": "Behavioral",
+    "difficulty": "Medium",
+    "question": "How do you stay updated with the latest testing tools and practices? What recent technology or methodology have you adopted and why?",
+    "keywords": ["learn", "blog", "conference", "community", "course", "practice", "new", "adopted", "improved", "efficiency", "trend", "AI"],
+    "max_score": 100,
+    "model_answer": "I stay updated through: 1) Following testing blogs — Ministry of Testing, Test Automation University, Medium. 2) YouTube channels and podcasts on testing. 3) LinkedIn communities and Twitter/X for industry trends. 4) Attending webinars and local meetups. 5) Hands-on practice — building side projects to try new tools. Recently adopted: Playwright over Selenium for new projects because of auto-waiting, better debugging (trace viewer), and faster execution. Also started using AI tools to help generate test data and review test cases. I believe continuous learning is essential — the testing landscape evolves rapidly with AI, shift-left practices, and new frameworks."
+  }
+]

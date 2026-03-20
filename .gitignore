@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Data files (user data - don't commit to public repo)
+backend/data/users.json
+backend/data/sessions.json
+backend/data/quotas.json
+backend/data/assessments.json
+backend/data/progress.json
+backend/data/bookmarks.json
+backend/data/topic_assessments.json
+backend/data/reviews.json
+backend/data/learning_plans.json
+backend/data/recordings/
+
+# Keep content files (they're part of the app)
+!backend/data/content/
+
+# Models (too large for git)
+backend/models/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env

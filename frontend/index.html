@@ -1,0 +1,1961 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrowthPath - Adaptive Learning Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; margin: 0; }
+        .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.07); }
+        .glass-strong { background: rgba(255,255,255,0.07); backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); }
+        .glow { box-shadow: 0 0 50px rgba(99,102,241,0.12); }
+        .glow-green { box-shadow: 0 0 50px rgba(16,185,129,0.12); }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        .pulse-ring { animation: pulseRing 1.5s ease-out infinite; }
+        @keyframes pulseRing { 0% { transform:scale(1); opacity:0.6; } 100% { transform:scale(2.2); opacity:0; } }
+        .thinking-dot { animation: bounce 1.4s ease-in-out infinite; }
+        .thinking-dot:nth-child(2) { animation-delay:0.2s; }
+        .thinking-dot:nth-child(3) { animation-delay:0.4s; }
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-8px)} }
+        .mic-wave { animation: micWave 1s ease-in-out infinite; }
+        @keyframes micWave { 0%,100%{height:12px} 50%{height:28px} }
+        textarea:focus, input:focus, select:focus { outline: none; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        .md-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; color: #e2e8f0; }
+        .md-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1rem 0 0.5rem; color: #e2e8f0; }
+        .md-content h3 { font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: #cbd5e1; }
+        .md-content p { margin: 0.5rem 0; line-height: 1.7; color: #94a3b8; }
+        .md-content ul, .md-content ol { margin: 0.5rem 0; padding-left: 1.5rem; color: #94a3b8; }
+        .md-content li { margin: 0.25rem 0; line-height: 1.6; }
+        .md-content code { background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+        .md-content pre { background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+        .md-content pre code { background: none; padding: 0; color: #e2e8f0; }
+        .md-content strong { color: #e2e8f0; }
+        .md-content blockquote { border-left: 3px solid rgba(99,102,241,0.4); padding-left: 1rem; margin: 0.75rem 0; color: #64748b; }
+        .tag-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    </style>
+</head>
+<body class="bg-slate-950 min-h-screen text-white">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const API = window.location.origin + "/api";
+
+// ─── Auth Helper ───
+function getToken() { return localStorage.getItem("gp_token"); }
+function setToken(t) { localStorage.setItem("gp_token", t); }
+function clearAuth() { localStorage.removeItem("gp_token"); localStorage.removeItem("gp_user"); }
+function getUser() { try { return JSON.parse(localStorage.getItem("gp_user")); } catch { return null; } }
+function setUser(u) { localStorage.setItem("gp_user", JSON.stringify(u)); }
+
+function authHeaders() {
+    const t = getToken();
+    return t ? { "Authorization": `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
+
+async function apiFetch(url, options = {}) {
+    const res = await fetch(`${API}${url}`, {
+        ...options,
+        headers: { ...authHeaders(), ...(options.headers || {}) },
+    });
+    if (res.status === 401) {
+        clearAuth();
+        window.location.reload();
+        throw new Error("Session expired");
+    }
+    return res;
+}
+
+// ─── Star Rating Display ───
+function Stars({ rating, size = "sm" }) {
+    const sz = size === "lg" ? "w-5 h-5" : "w-3.5 h-3.5";
+    return (
+        <div className="flex gap-0.5">
+            {[1,2,3,4,5].map(i => (
+                <svg key={i} className={`${sz} ${i <= rating ? 'text-amber-400' : 'text-slate-700'}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                </svg>
+            ))}
+        </div>
+    );
+}
+
+// ─── Hooks ───
+
+function useTimer() {
+    const [seconds, setSeconds] = useState(0);
+    const [running, setRunning] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        if (running) ref.current = setInterval(() => setSeconds(s => s + 1), 1000);
+        return () => clearInterval(ref.current);
+    }, [running]);
+    const start = () => setRunning(true);
+    const stop = () => { setRunning(false); clearInterval(ref.current); };
+    const format = () => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h > 0 ? h + ':' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    };
+    return { seconds, start, stop, format, running };
+}
+
+function useBrowserSpeech() {
+    const [transcript, setTranscript] = useState("");
+    const [listening, setListening] = useState(false);
+    const [supported, setSupported] = useState(true);
+    const recRef = useRef(null);
+    const finalRef = useRef("");
+    const activeRef = useRef(false);
+    useEffect(() => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { setSupported(false); return; }
+        const rec = new SR();
+        rec.continuous = true; rec.interimResults = true; rec.lang = "en-IN"; rec.maxAlternatives = 3;
+        rec.onresult = (event) => {
+            let interim = "", final = "";
+            for (let i = 0; i < event.results.length; i++) {
+                let best = event.results[i][0];
+                for (let j = 1; j < event.results[i].length; j++) {
+                    if (event.results[i][j].confidence > best.confidence) best = event.results[i][j];
+                }
+                if (event.results[i].isFinal) final += best.transcript + " ";
+                else interim = best.transcript;
+            }
+            if (final) finalRef.current = final;
+            setTranscript(finalRef.current + interim);
+        };
+        rec.onend = () => { if (activeRef.current) { try { rec.start(); } catch(e) {} } else setListening(false); };
+        rec.onerror = (e) => {
+            if ((e.error === "no-speech" || e.error === "aborted") && activeRef.current) { try { rec.start(); } catch(ex) {} return; }
+            activeRef.current = false; setListening(false);
+        };
+        recRef.current = rec;
+    }, []);
+    const startListening = () => { finalRef.current = ""; setTranscript(""); activeRef.current = true; try { recRef.current.start(); } catch(e) {} setListening(true); };
+    const stopListening = () => { activeRef.current = false; try { recRef.current.stop(); } catch(e) {} setListening(false); };
+    const reset = () => { finalRef.current = ""; setTranscript(""); };
+    return { transcript, setTranscript, listening, supported, startListening, stopListening, reset, processing: false };
+}
+
+function useLocalSpeech(engine) {
+    const [transcript, setTranscript] = useState("");
+    const [listening, setListening] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const chunksRef = useRef([]);
+    const streamRef = useRef(null);
+    const intervalRef = useRef(null);
+    const fullTranscriptRef = useRef("");
+    const sendChunk = async (blob, isFinal) => {
+        if (blob.size < 100) return;
+        setProcessing(true);
+        try {
+            const wavBlob = await convertToWav(blob);
+            const formData = new FormData();
+            formData.append("audio", wavBlob, "chunk.wav");
+            formData.append("engine", engine);
+            formData.append("is_final", isFinal ? "true" : "false");
+            const res = await fetch(`${API}/transcribe/stream`, { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.transcript) {
+                if (isFinal) fullTranscriptRef.current = data.transcript;
+                else fullTranscriptRef.current += data.transcript + " ";
+                setTranscript(fullTranscriptRef.current.trim());
+            }
+        } catch (e) { console.error("Transcribe error:", e); }
+        setProcessing(false);
+    };
+    const startListening = async () => {
+        fullTranscriptRef.current = ""; setTranscript(""); chunksRef.current = [];
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+            streamRef.current = stream;
+            const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+            mediaRecorderRef.current = recorder;
+            let chunkCollector = [];
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) { chunksRef.current.push(e.data); chunkCollector.push(e.data); } };
+            recorder.start(500);
+            setListening(true);
+            intervalRef.current = setInterval(() => {
+                if (chunkCollector.length > 0) { const blob = new Blob(chunkCollector, { type: "audio/webm" }); chunkCollector = []; sendChunk(blob, false); }
+            }, 4000);
+        } catch (e) { console.error("Mic error:", e); }
+    };
+    const stopListening = async () => {
+        clearInterval(intervalRef.current);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+        setListening(false);
+        if (chunksRef.current.length > 0) {
+            const fullBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+            chunksRef.current = [];
+            fullTranscriptRef.current = "";
+            await sendChunk(fullBlob, true);
+        }
+    };
+    const reset = () => { fullTranscriptRef.current = ""; setTranscript(""); };
+    return { transcript, setTranscript, listening, processing, supported: true, startListening, stopListening, reset };
+}
+
+function useAudioRecorder() {
+    const mediaRecorderRef = useRef(null);
+    const streamRef = useRef(null);
+    const chunksRef = useRef([]);
+    const [recording, setRecording] = useState(false);
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            chunksRef.current = [];
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+            recorder.start();
+            setRecording(true);
+        } catch(e) { console.error("Record error:", e); }
+    };
+    const stopRecording = () => {
+        return new Promise((resolve) => {
+            if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") { resolve(null); return; }
+            mediaRecorderRef.current.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+                const url = URL.createObjectURL(blob);
+                resolve(url);
+            };
+            mediaRecorderRef.current.stop();
+            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+            setRecording(false);
+        });
+    };
+    return { recording, startRecording, stopRecording };
+}
+
+async function convertToWav(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    let audioBuffer;
+    try { audioBuffer = await audioCtx.decodeAudioData(arrayBuffer); } catch(e) { audioCtx.close(); return blob; }
+    const sampleRate = 16000;
+    const rawData = audioBuffer.getChannelData(0);
+    let samples;
+    if (audioBuffer.sampleRate !== sampleRate) {
+        const ratio = audioBuffer.sampleRate / sampleRate;
+        const newLen = Math.round(rawData.length / ratio);
+        samples = new Float32Array(newLen);
+        for (let i = 0; i < newLen; i++) samples[i] = rawData[Math.round(i * ratio)];
+    } else { samples = rawData; }
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+    writeStr(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); writeStr(8, "WAVE"); writeStr(12, "fmt ");
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeStr(36, "data"); view.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) { const s = Math.max(-1, Math.min(1, samples[i])); view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+    audioCtx.close();
+    return new Blob([buffer], { type: "audio/wav" });
+}
+
+// ─── Reusable Components ───
+
+function EnginePicker({ engine, onChange }) {
+    const engines = [
+        { id: "browser", label: "Browser", desc: "Online, real-time", icon: "\u{1F310}" },
+        { id: "whisper", label: "Whisper", desc: "Local, best accuracy", icon: "\u{1F3AF}" },
+        { id: "vosk",    label: "Vosk",    desc: "Local, exact words", icon: "\u26A1" },
+    ];
+    return (
+        <div className="flex gap-2">
+            {engines.map(e => (
+                <button key={e.id} onClick={() => onChange(e.id)}
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${engine === e.id ? 'bg-indigo-600/30 border border-indigo-500/40 text-indigo-300' : 'glass text-slate-400 hover:text-slate-300'}`}>
+                    <span className="block text-base mb-0.5">{e.icon}</span>
+                    <span className="block font-semibold">{e.label}</span>
+                    <span className="block text-[10px] opacity-60">{e.desc}</span>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function MicButton({ listening, processing, onStart, onStop }) {
+    return (
+        <button onClick={listening ? onStop : onStart} disabled={processing}
+            className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${processing ? 'bg-amber-500 shadow-lg shadow-amber-500/30 animate-pulse' : listening ? 'bg-red-500 hover:bg-red-400 shadow-lg shadow-red-500/30' : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-500/20'}`}>
+            {listening && !processing && <div className="absolute inset-0 rounded-full bg-red-500/30 pulse-ring"></div>}
+            <svg className="w-7 h-7 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {processing ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    : listening ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/>}
+            </svg>
+        </button>
+    );
+}
+
+function WaveIndicator({ listening }) {
+    if (!listening) return null;
+    return (<div className="flex items-end gap-1 h-8">{[0,1,2,3,4,5,6].map(i => (<div key={i} className="w-1 bg-indigo-400 rounded-full mic-wave" style={{ animationDelay: `${i*0.12}s`, height: '12px' }}></div>))}</div>);
+}
+
+function TopicBadge({ topic, difficulty }) {
+    const colors = { Introduction: "bg-blue-500/20 text-blue-300", Python: "bg-yellow-500/20 text-yellow-300", Pytest: "bg-green-500/20 text-green-300", Playwright: "bg-purple-500/20 text-purple-300", Java: "bg-orange-500/20 text-orange-300", Selenium: "bg-emerald-500/20 text-emerald-300", "API Testing": "bg-cyan-500/20 text-cyan-300", "UI Testing": "bg-pink-500/20 text-pink-300", Locust: "bg-lime-500/20 text-lime-300", "Manual Testing": "bg-amber-500/20 text-amber-300", Behavioral: "bg-violet-500/20 text-violet-300", HR: "bg-rose-500/20 text-rose-300" };
+    const diffColors = { Easy: "text-green-400", Medium: "text-yellow-400", Hard: "text-red-400" };
+    return (<div className="flex items-center gap-2"><span className={`px-3 py-1 rounded-full text-xs font-semibold ${colors[topic] || 'bg-slate-500/20 text-slate-300'}`}>{topic}</span>{difficulty && <span className={`text-xs font-medium ${diffColors[difficulty] || ''}`}>{difficulty}</span>}</div>);
+}
+
+function NavBar({ screen, onNavigate, onLogout, userName }) {
+    const items = [
+        { id: "dashboard", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+        { id: "learning", label: "Learn", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
+        { id: "interview", label: "Interview", icon: "M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" },
+        { id: "history", label: "History", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+        { id: "review", label: "Review", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+        { id: "profile", label: "Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+    ];
+    return (
+        <nav className="glass-strong border-b border-slate-800/50 px-4 py-2 flex items-center justify-between sticky top-0 z-40">
+            <div className="flex items-center gap-1">
+                <span className="text-indigo-400 font-bold text-sm mr-3">GrowthPath</span>
+                {items.map(item => (
+                    <button key={item.id} onClick={() => onNavigate(item.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${screen === item.id ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon}/></svg>
+                        <span className="hidden md:inline">{item.label}</span>
+                    </button>
+                ))}
+            </div>
+            <div className="flex items-center gap-3">
+                <span className="text-slate-500 text-xs">{userName}</span>
+                <button onClick={onLogout} className="text-slate-500 hover:text-red-400 text-xs transition-colors">Logout</button>
+            </div>
+        </nav>
+    );
+}
+
+function LoadingSpinner() {
+    return (
+        <div className="flex items-center justify-center py-12">
+            <div className="flex gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Sprint 1: Auth Screens ───
+
+function LoginScreen({ onLogin, onSwitchToRegister }) {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError(""); setLoading(true);
+        try {
+            const res = await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error || "Login failed"); setLoading(false); return; }
+            onLogin(data);
+        } catch { setError("Cannot connect to server"); }
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 fade-in">
+            <div className="glass-strong rounded-2xl p-10 max-w-md w-full glow">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 mx-auto mb-4 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+                    </div>
+                    <h1 className="text-3xl font-bold mb-1">GrowthPath</h1>
+                    <p className="text-slate-400 text-sm">Sign in to continue learning</p>
+                </div>
+                {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm mb-4">{error}</div>}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"/>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Password</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" required
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"/>
+                    </div>
+                    <button type="submit" disabled={loading}
+                        className="w-full py-3.5 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
+                        {loading ? "Signing in..." : "Sign In"}
+                    </button>
+                </form>
+                <p className="text-center text-slate-500 text-sm mt-6">
+                    Don't have an account? <button onClick={onSwitchToRegister} className="text-indigo-400 hover:text-indigo-300 font-medium">Register</button>
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function RegisterScreen({ onRegister, onSwitchToLogin }) {
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [techStack, setTechStack] = useState([]);
+    const [interests, setInterests] = useState([]);
+    const [hours, setHours] = useState(2);
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState(null);
+    const [techOptions, setTechOptions] = useState([]);
+    const [interestOptions, setInterestOptions] = useState([]);
+
+    useEffect(() => {
+        fetch(`${API}/config/tech-stacks`).then(r => r.json()).then(setTechOptions).catch(() => {});
+        fetch(`${API}/config/interest-areas`).then(r => r.json()).then(setInterestOptions).catch(() => {});
+    }, []);
+
+    const toggleTag = (list, setList, item) => {
+        setList(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (interests.length === 0) { setError("Select at least one interest area"); return; }
+        setError(""); setLoading(true);
+        try {
+            const res = await fetch(`${API}/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ full_name: name, email, tech_stack: techStack, interest_areas: interests, hours_per_day: hours }) });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error || "Registration failed"); setLoading(false); return; }
+            setSuccess(data);
+        } catch { setError("Cannot connect to server"); }
+        setLoading(false);
+    };
+
+    if (success) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-4 fade-in">
+                <div className="glass-strong rounded-2xl p-10 max-w-md w-full glow-green text-center">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 mx-auto mb-4 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold mb-2">Registration Successful!</h2>
+                    <p className="text-slate-400 text-sm mb-4">Your default password is:</p>
+                    <div className="bg-slate-800/60 rounded-xl px-6 py-3 mb-6 inline-block">
+                        <code className="text-indigo-400 text-lg font-bold">{success.password}</code>
+                    </div>
+                    <p className="text-slate-500 text-xs mb-6">You'll be asked to change this on first login.</p>
+                    <button onClick={() => onRegister(success)} className="w-full py-3 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                        Continue to Login
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 fade-in">
+            <div className="glass-strong rounded-2xl p-8 max-w-lg w-full glow">
+                <div className="text-center mb-6">
+                    <h1 className="text-2xl font-bold mb-1">Create Account</h1>
+                    <p className="text-slate-400 text-sm">Set up your learning profile</p>
+                </div>
+                {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm mb-4">{error}</div>}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Full Name</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required
+                                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                        </div>
+                        <div>
+                            <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Email</label>
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required
+                                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Tech Stack (select your skills)</label>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
+                            {techOptions.map(t => (
+                                <button type="button" key={t} onClick={() => toggleTag(techStack, setTechStack, t)}
+                                    className={`tag-pill ${techStack.includes(t) ? 'bg-indigo-600/30 border border-indigo-500/40 text-indigo-300' : 'bg-slate-800/60 border border-slate-700/40 text-slate-500 hover:text-slate-300'}`}>
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Interest Areas (what to learn)</label>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
+                            {interestOptions.map(t => (
+                                <button type="button" key={t} onClick={() => toggleTag(interests, setInterests, t)}
+                                    className={`tag-pill ${interests.includes(t) ? 'bg-emerald-600/30 border border-emerald-500/40 text-emerald-300' : 'bg-slate-800/60 border border-slate-700/40 text-slate-500 hover:text-slate-300'}`}>
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Hours per day: {hours}h</label>
+                        <input type="range" min="0.5" max="8" step="0.5" value={hours} onChange={e => setHours(parseFloat(e.target.value))}
+                            className="w-full accent-indigo-500"/>
+                        <div className="flex justify-between text-slate-600 text-[10px]"><span>0.5h</span><span>4h</span><span>8h</span></div>
+                    </div>
+                    <button type="submit" disabled={loading}
+                        className="w-full py-3 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
+                        {loading ? "Creating account..." : "Create Account"}
+                    </button>
+                </form>
+                <p className="text-center text-slate-500 text-sm mt-4">
+                    Already have an account? <button onClick={onSwitchToLogin} className="text-indigo-400 hover:text-indigo-300 font-medium">Sign In</button>
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function ChangePasswordScreen({ onComplete }) {
+    const [password, setPassword] = useState("");
+    const [confirm, setConfirm] = useState("");
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (password !== confirm) { setError("Passwords don't match"); return; }
+        if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+        setError(""); setLoading(true);
+        try {
+            const res = await apiFetch("/auth/password", { method: "PUT", body: JSON.stringify({ new_password: password }) });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error || "Failed"); setLoading(false); return; }
+            onComplete();
+        } catch { setError("Connection error"); }
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 fade-in">
+            <div className="glass-strong rounded-2xl p-10 max-w-md w-full glow">
+                <div className="text-center mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/20 mx-auto mb-4 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold mb-1">Change Password</h2>
+                    <p className="text-slate-400 text-sm">Please set a new password to continue</p>
+                </div>
+                {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm mb-4">{error}</div>}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">New Password</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Confirm Password</label>
+                        <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat password" required
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                    </div>
+                    <button type="submit" disabled={loading}
+                        className="w-full py-3.5 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-all disabled:opacity-50">
+                        {loading ? "Saving..." : "Set Password & Continue"}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+// ─── Sprint 2: Dashboard, Profile, History ───
+
+function DashboardScreen({ onNavigate }) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        apiFetch("/dashboard").then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    }, []);
+
+    if (loading) return <LoadingSpinner />;
+    if (!data) return <div className="text-center py-12 text-slate-500">Failed to load dashboard</div>;
+
+    const { user, stats, plan_progress, next_topic, plan_timeline, quota, overall_proficiency } = data;
+    const pp = plan_progress || {};
+
+    return (
+        <div className="max-w-5xl mx-auto p-4 md:p-6 fade-in">
+            {/* Welcome */}
+            <div className="mb-6">
+                <h1 className="text-2xl font-bold">Welcome back, {user.full_name}</h1>
+                <p className="text-slate-500 text-sm">{user.email}</p>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="glass rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-indigo-400">{pp.progress_pct || 0}%</p>
+                    <p className="text-slate-500 text-xs mt-1">Plan Progress</p>
+                </div>
+                <div className="glass rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-emerald-400">{stats.total_sessions}</p>
+                    <p className="text-slate-500 text-xs mt-1">Sessions</p>
+                </div>
+                <div className="glass rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-amber-400">{stats.average_score || 0}</p>
+                    <p className="text-slate-500 text-xs mt-1">Avg Score</p>
+                </div>
+                <div className="glass rounded-xl p-4 text-center">
+                    <div className="flex justify-center mb-1"><Stars rating={Math.round(overall_proficiency || 0)} size="lg" /></div>
+                    <p className="text-slate-500 text-xs mt-1">Proficiency</p>
+                </div>
+            </div>
+
+            {/* Quota Bar */}
+            {quota && (
+                <div className="glass rounded-xl p-4 mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Daily Quota</span>
+                        <span className="text-slate-400 text-xs">{quota.questions_attempted}/{quota.daily_limit} questions today</span>
+                    </div>
+                    <div className="w-full bg-slate-800/50 rounded-full h-2">
+                        <div className={`h-2 rounded-full transition-all ${quota.questions_attempted >= quota.daily_limit ? 'bg-red-500' : 'bg-indigo-500'}`}
+                            style={{ width: `${Math.min(100, (quota.questions_attempted / quota.daily_limit) * 100)}%` }}></div>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4 mb-6">
+                {/* Next Topic / Resume */}
+                <div className="glass rounded-xl p-5">
+                    <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Continue Learning</h3>
+                    {next_topic ? (
+                        <div>
+                            <p className="text-slate-300 text-sm font-medium">{next_topic.title}</p>
+                            <p className="text-slate-500 text-xs mt-1">{next_topic.interest_area}</p>
+                            <p className="text-xs mt-1"><span className={`px-2 py-0.5 rounded-full ${next_topic.status === 'in_progress' ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-400'}`}>{next_topic.status.replace(/_/g, ' ')}</span></p>
+                            <button onClick={() => onNavigate("learning", { topicId: next_topic.topic_id })}
+                                className="mt-3 px-5 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                                Resume Learning
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-slate-500 text-sm">No active topics. Generate a learning plan from your profile.</p>
+                    )}
+                    {data.has_resumable_session && (
+                        <button onClick={() => onNavigate("interview", { resumeSessionId: data.resumable_session_id })}
+                            className="mt-3 px-5 py-2 rounded-xl text-sm font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/20 transition-all block">
+                            Resume Interview Session
+                        </button>
+                    )}
+                </div>
+
+                {/* Topic Scores */}
+                <div className="glass rounded-xl p-5">
+                    <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Topic Scores</h3>
+                    {Object.keys(stats.topic_scores || {}).length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {Object.entries(stats.topic_scores).sort((a,b) => b[1]-a[1]).map(([topic, score]) => (
+                                <div key={topic} className="flex items-center gap-2">
+                                    <span className="text-slate-400 text-xs w-24 truncate">{topic}</span>
+                                    <div className="flex-1 bg-slate-800/50 rounded-full h-1.5">
+                                        <div className={`h-1.5 rounded-full ${score >= 75 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${score}%` }}></div>
+                                    </div>
+                                    <span className="text-slate-500 text-xs w-8 text-right">{score}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : <p className="text-slate-500 text-sm">Complete sessions to see scores</p>}
+                </div>
+            </div>
+
+            {/* Learning Plan Timeline */}
+            {plan_timeline && plan_timeline.length > 0 && (
+                <div className="glass rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-white text-sm font-semibold uppercase tracking-wider">Learning Path</h3>
+                        <span className="text-slate-500 text-xs">{pp.completed}/{pp.total} topics complete</span>
+                    </div>
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                        {plan_timeline.map((t, i) => {
+                            const isDelayed = t.revised_end_date > t.original_end_date;
+                            const statusColors = {
+                                completed: "bg-emerald-500/20 text-emerald-400",
+                                content_complete: "bg-blue-500/20 text-blue-400",
+                                in_progress: "bg-amber-500/20 text-amber-400",
+                                not_started: "bg-slate-500/20 text-slate-500",
+                            };
+                            return (
+                                <div key={t.topic_id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/[0.02] cursor-pointer"
+                                    onClick={() => onNavigate("learning", { topicId: t.topic_id })}>
+                                    <span className="text-slate-600 text-xs w-5">{i+1}</span>
+                                    <div className={`w-2 h-2 rounded-full ${t.status === 'completed' ? 'bg-emerald-400' : t.status === 'in_progress' ? 'bg-amber-400' : 'bg-slate-700'}`}></div>
+                                    <span className="text-slate-300 text-sm flex-1 truncate">{t.title}</span>
+                                    <span className="text-slate-600 text-[10px] w-20 truncate">{t.interest_area}</span>
+                                    {t.assessment_rating && <Stars rating={t.assessment_rating} />}
+                                    <span className={`text-[10px] w-16 text-right ${isDelayed ? 'text-red-400' : 'text-slate-600'}`}>{t.revised_end_date}</span>
+                                    {isDelayed && <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ProfileScreen({ onNavigate }) {
+    const [profile, setProfile] = useState(null);
+    const [editing, setEditing] = useState(false);
+    const [form, setForm] = useState({});
+    const [techOptions, setTechOptions] = useState([]);
+    const [interestOptions, setInterestOptions] = useState([]);
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState("");
+
+    useEffect(() => {
+        apiFetch("/auth/profile").then(r => r.json()).then(p => { setProfile(p); setForm(p); });
+        fetch(`${API}/config/tech-stacks`).then(r => r.json()).then(setTechOptions).catch(() => {});
+        fetch(`${API}/config/interest-areas`).then(r => r.json()).then(setInterestOptions).catch(() => {});
+    }, []);
+
+    const toggleTag = (field, item) => {
+        setForm(prev => ({
+            ...prev,
+            [field]: prev[field].includes(item) ? prev[field].filter(i => i !== item) : [...prev[field], item]
+        }));
+    };
+
+    const handleSave = async () => {
+        setSaving(true); setMsg("");
+        try {
+            const res = await apiFetch("/auth/profile", { method: "PUT", body: JSON.stringify(form) });
+            const data = await res.json();
+            if (res.ok) { setProfile(data); setEditing(false); setMsg("Profile updated!"); setTimeout(() => setMsg(""), 3000); }
+        } catch {}
+        setSaving(false);
+    };
+
+    if (!profile) return <LoadingSpinner />;
+
+    return (
+        <div className="max-w-2xl mx-auto p-4 md:p-6 fade-in">
+            <div className="flex items-center justify-between mb-6">
+                <h1 className="text-2xl font-bold">Profile</h1>
+                {!editing ? (
+                    <button onClick={() => setEditing(true)} className="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 transition-all">Edit</button>
+                ) : (
+                    <div className="flex gap-2">
+                        <button onClick={() => { setEditing(false); setForm(profile); }} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-slate-300">Cancel</button>
+                        <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50">{saving ? "Saving..." : "Save"}</button>
+                    </div>
+                )}
+            </div>
+            {msg && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm mb-4">{msg}</div>}
+            <div className="glass rounded-xl p-6 space-y-5">
+                <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Name</label>
+                    {editing ? (
+                        <input type="text" value={form.full_name || ""} onChange={e => setForm({...form, full_name: e.target.value})}
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm"/>
+                    ) : <p className="text-white text-sm">{profile.full_name}</p>}
+                </div>
+                <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Email</label>
+                    <p className="text-slate-400 text-sm">{profile.email}</p>
+                </div>
+                <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Tech Stack</label>
+                    {editing ? (
+                        <div className="flex flex-wrap gap-1.5">
+                            {techOptions.map(t => (
+                                <button key={t} onClick={() => toggleTag("tech_stack", t)}
+                                    className={`tag-pill ${(form.tech_stack||[]).includes(t) ? 'bg-indigo-600/30 border border-indigo-500/40 text-indigo-300' : 'bg-slate-800/60 border border-slate-700/40 text-slate-500 hover:text-slate-300'}`}>{t}</button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap gap-1.5">{(profile.tech_stack||[]).map(t => <span key={t} className="tag-pill bg-indigo-600/20 text-indigo-300">{t}</span>)}</div>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Interest Areas</label>
+                    {editing ? (
+                        <div className="flex flex-wrap gap-1.5">
+                            {interestOptions.map(t => (
+                                <button key={t} onClick={() => toggleTag("interest_areas", t)}
+                                    className={`tag-pill ${(form.interest_areas||[]).includes(t) ? 'bg-emerald-600/30 border border-emerald-500/40 text-emerald-300' : 'bg-slate-800/60 border border-slate-700/40 text-slate-500 hover:text-slate-300'}`}>{t}</button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap gap-1.5">{(profile.interest_areas||[]).map(t => <span key={t} className="tag-pill bg-emerald-600/20 text-emerald-300">{t}</span>)}</div>
+                    )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Hours/Day</label>
+                        {editing ? (
+                            <input type="range" min="0.5" max="8" step="0.5" value={form.hours_per_day || 2}
+                                onChange={e => setForm({...form, hours_per_day: parseFloat(e.target.value)})} className="w-full accent-indigo-500"/>
+                        ) : null}
+                        <p className="text-white text-sm">{(editing ? form.hours_per_day : profile.hours_per_day) || 2} hours</p>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Daily Question Limit</label>
+                        {editing ? (
+                            <input type="number" min="15" max="30" value={form.daily_limit || 20}
+                                onChange={e => setForm({...form, daily_limit: parseInt(e.target.value)})}
+                                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2 text-white text-sm"/>
+                        ) : <p className="text-white text-sm">{profile.daily_limit || 20} questions</p>}
+                    </div>
+                </div>
+            </div>
+            <div className="mt-4 glass rounded-xl p-4">
+                <button onClick={async () => {
+                    const res = await apiFetch("/learning/generate-plan", { method: "POST" });
+                    if (res.ok) { setMsg("Learning plan regenerated!"); setTimeout(() => setMsg(""), 3000); }
+                }} className="px-5 py-2 rounded-xl text-sm font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/20 transition-all">
+                    Regenerate Learning Plan
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function SessionHistoryScreen() {
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        apiFetch("/session/history").then(r => r.json()).then(h => { setHistory(h); setLoading(false); }).catch(() => setLoading(false));
+    }, []);
+
+    if (loading) return <LoadingSpinner />;
+
+    return (
+        <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+            <h1 className="text-2xl font-bold mb-6">Session History</h1>
+            {history.length === 0 ? (
+                <div className="glass rounded-xl p-8 text-center"><p className="text-slate-500">No completed sessions yet</p></div>
+            ) : (
+                <div className="space-y-3">
+                    {history.map(s => (
+                        <div key={s.session_id} className="glass rounded-xl p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                            <div>
+                                <p className="text-white text-sm font-medium">{s.role_name}</p>
+                                <p className="text-slate-500 text-xs">{s.job_title} | {new Date(s.date).toLocaleDateString()}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                    <p className={`text-lg font-bold ${s.overall_score >= 75 ? 'text-emerald-400' : s.overall_score >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{s.overall_score}/100</p>
+                                    <p className="text-slate-600 text-xs">{s.total_questions} Qs | {s.time_taken}</p>
+                                </div>
+                                <Stars rating={Math.round(s.overall_score / 20)} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sprint 3+4: Learning Module ───
+
+function LearningScreen({ initialTopicId, onNavigate }) {
+    const [plan, setPlan] = useState(null);
+    const [selectedTopic, setSelectedTopic] = useState(null);
+    const [topicContent, setTopicContent] = useState(null);
+    const [activeDim, setActiveDim] = useState("interview");
+    const [dimContent, setDimContent] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [loadingContent, setLoadingContent] = useState(false);
+    const contentRef = useRef(null);
+
+    useEffect(() => {
+        apiFetch("/learning/plan").then(r => r.ok ? r.json() : null).then(p => {
+            setPlan(p); setLoading(false);
+            if (initialTopicId && p) {
+                const topic = p.topics.find(t => t.topic_id === initialTopicId);
+                if (topic) loadTopic(topic);
+            }
+        }).catch(() => setLoading(false));
+    }, []);
+
+    const loadTopic = async (topic) => {
+        setSelectedTopic(topic);
+        setTopicContent(null); setDimContent(null);
+        try {
+            const res = await apiFetch(`/learning/topic/${topic.topic_id}/content`);
+            if (res.ok) {
+                const data = await res.json();
+                setTopicContent(data);
+                loadDimension(topic.topic_id, "interview");
+            } else {
+                setTopicContent({ dimensions: {}, title: topic.title, noContent: true });
+            }
+        } catch { setTopicContent({ dimensions: {}, title: topic.title, noContent: true }); }
+    };
+
+    const loadDimension = async (topicId, dim) => {
+        setActiveDim(dim); setDimContent(null); setLoadingContent(true);
+        try {
+            const res = await apiFetch(`/learning/topic/${topicId}/content?dimension=${dim}`);
+            if (res.ok) {
+                const data = await res.json();
+                setDimContent(data);
+                // Restore bookmark position
+                if (data.bookmark && contentRef.current) {
+                    setTimeout(() => {
+                        if (contentRef.current) contentRef.current.scrollTop = (data.bookmark.scroll_pct / 100) * contentRef.current.scrollHeight;
+                    }, 100);
+                }
+            }
+        } catch {}
+        setLoadingContent(false);
+    };
+
+    const handleSaveBookmark = async () => {
+        if (!selectedTopic || !contentRef.current) return;
+        const scrollPct = (contentRef.current.scrollTop / contentRef.current.scrollHeight) * 100;
+        await apiFetch(`/learning/topic/${selectedTopic.topic_id}/bookmark`, {
+            method: "POST", body: JSON.stringify({ dimension: activeDim, position: contentRef.current.scrollTop, scroll_pct: scrollPct })
+        });
+    };
+
+    const handleCompleteDimension = async () => {
+        if (!selectedTopic) return;
+        await apiFetch(`/learning/topic/${selectedTopic.topic_id}/dimension/${activeDim}/complete`, { method: "POST" });
+        // Reload plan
+        const res = await apiFetch("/learning/plan");
+        if (res.ok) {
+            const p = await res.json();
+            setPlan(p);
+            const updated = p.topics.find(t => t.topic_id === selectedTopic.topic_id);
+            if (updated) setSelectedTopic(updated);
+        }
+        // Reload topic content to get updated statuses
+        loadTopic(selectedTopic);
+    };
+
+    const handleMarkReview = async () => {
+        if (!selectedTopic) return;
+        await apiFetch(`/learning/topic/${selectedTopic.topic_id}/review`, {
+            method: "POST", body: JSON.stringify({ dimension: activeDim })
+        });
+    };
+
+    if (loading) return <LoadingSpinner />;
+    if (!plan) return (
+        <div className="max-w-2xl mx-auto p-6 text-center fade-in">
+            <div className="glass rounded-xl p-8">
+                <p className="text-slate-400 mb-4">No learning plan found. Go to Profile to set up your interests and generate a plan.</p>
+                <button onClick={() => onNavigate("profile")} className="px-5 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white">Go to Profile</button>
+            </div>
+        </div>
+    );
+
+    // Topic list view
+    if (!selectedTopic) {
+        return (
+            <div className="max-w-4xl mx-auto p-4 md:p-6 fade-in">
+                <h1 className="text-2xl font-bold mb-2">Learning Path</h1>
+                <p className="text-slate-500 text-sm mb-6">
+                    {plan.topics.filter(t => t.status === 'completed').length}/{plan.topics.length} topics completed |
+                    Target: {plan.expected_completion}
+                </p>
+                <div className="space-y-2">
+                    {plan.topics.map((topic, i) => {
+                        const dimsDone = topic.dimensions_completed ? topic.dimensions_completed.length : 0;
+                        const statusColors = {
+                            completed: "border-emerald-500/30 bg-emerald-500/5",
+                            content_complete: "border-blue-500/30 bg-blue-500/5",
+                            in_progress: "border-amber-500/30 bg-amber-500/5",
+                            not_started: "border-slate-700/30",
+                        };
+                        return (
+                            <div key={topic.topic_id} onClick={() => loadTopic(topic)}
+                                className={`glass rounded-xl p-4 cursor-pointer hover:bg-white/[0.02] transition-all border ${statusColors[topic.status] || ''}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-slate-600 text-xs w-5">{i+1}</span>
+                                        <div className={`w-3 h-3 rounded-full ${topic.status === 'completed' ? 'bg-emerald-400' : topic.status === 'in_progress' ? 'bg-amber-400' : topic.status === 'content_complete' ? 'bg-blue-400' : 'bg-slate-700'}`}></div>
+                                        <div>
+                                            <p className="text-white text-sm font-medium">{topic.title}</p>
+                                            <p className="text-slate-500 text-xs">{topic.interest_area} | {topic.estimated_hours}h est.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-slate-600 text-xs">{dimsDone}/4 dims</span>
+                                        {topic.assessment_rating && <Stars rating={topic.assessment_rating} />}
+                                        <span className="text-slate-600 text-xs">{topic.revised_end_date}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    // Topic detail view with content
+    const dimensions = ["interview", "deep_dive", "best_practices", "tips_tricks"];
+    const dimLabels = { interview: "Interview Prep", deep_dive: "Deep Dive", best_practices: "Best Practices", tips_tricks: "Tips & Tricks" };
+    const allDimsComplete = selectedTopic.dimensions_completed && selectedTopic.dimensions_completed.length >= 4;
+
+    return (
+        <div className="max-w-4xl mx-auto p-4 md:p-6 fade-in">
+            {/* Back + Title */}
+            <div className="flex items-center gap-3 mb-4">
+                <button onClick={() => { setSelectedTopic(null); setTopicContent(null); setDimContent(null); }}
+                    className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all">
+                    Back
+                </button>
+                <div>
+                    <h1 className="text-xl font-bold">{selectedTopic.title}</h1>
+                    <p className="text-slate-500 text-xs">{selectedTopic.interest_area} | {selectedTopic.estimated_hours}h estimated</p>
+                </div>
+            </div>
+
+            {/* Dimension Tabs */}
+            <div className="flex gap-2 mb-4 overflow-x-auto">
+                {dimensions.map(dim => {
+                    const isComplete = selectedTopic.dimensions_completed && selectedTopic.dimensions_completed.includes(dim);
+                    const dimMeta = topicContent?.dimensions?.[dim];
+                    return (
+                        <button key={dim} onClick={() => loadDimension(selectedTopic.topic_id, dim)}
+                            className={`px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${activeDim === dim ? 'bg-indigo-600/30 border border-indigo-500/40 text-indigo-300' : 'glass text-slate-400 hover:text-slate-300'}`}>
+                            {isComplete && <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>}
+                            {dimLabels[dim]}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Content Area */}
+            {topicContent?.noContent ? (
+                <div className="glass rounded-xl p-8 text-center">
+                    <p className="text-slate-500">Content coming soon for this topic.</p>
+                    <p className="text-slate-600 text-xs mt-2">{selectedTopic.description}</p>
+                </div>
+            ) : loadingContent ? <LoadingSpinner /> : dimContent ? (
+                <div className="glass rounded-xl overflow-hidden">
+                    <div ref={contentRef} className="p-6 max-h-[60vh] overflow-y-auto md-content"
+                        onScroll={handleSaveBookmark}
+                        dangerouslySetInnerHTML={{ __html: typeof marked !== 'undefined' && marked.parse ? marked.parse(dimContent.content || '') : (dimContent.content || '') }}>
+                    </div>
+                    <div className="border-t border-slate-700/30 px-6 py-3 flex items-center justify-between">
+                        <div className="flex gap-2">
+                            <button onClick={handleCompleteDimension}
+                                className="px-4 py-2 rounded-xl text-xs font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/20 transition-all">
+                                Mark Complete
+                            </button>
+                            <button onClick={handleMarkReview}
+                                className="px-4 py-2 rounded-xl text-xs font-medium bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 border border-amber-500/20 transition-all">
+                                Mark for Review
+                            </button>
+                        </div>
+                        {/* Navigate dimensions */}
+                        <div className="flex gap-2">
+                            {activeDim !== "interview" && (
+                                <button onClick={() => loadDimension(selectedTopic.topic_id, dimensions[dimensions.indexOf(activeDim) - 1])}
+                                    className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-all">Prev</button>
+                            )}
+                            {activeDim !== "tips_tricks" && (
+                                <button onClick={() => loadDimension(selectedTopic.topic_id, dimensions[dimensions.indexOf(activeDim) + 1])}
+                                    className="px-3 py-1.5 rounded-lg text-xs text-indigo-400 hover:text-indigo-300 transition-all">Next</button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {/* Assessment trigger */}
+            {allDimsComplete && selectedTopic.status !== "completed" && (
+                <div className="mt-4 glass rounded-xl p-5 border border-indigo-500/20 text-center fade-in">
+                    <p className="text-indigo-300 text-sm font-medium mb-2">All 4 dimensions complete!</p>
+                    <p className="text-slate-500 text-xs mb-3">Take the 5-question assessment to earn your topic rating.</p>
+                    <button onClick={() => onNavigate("assessment", { topicId: selectedTopic.topic_id, topicTitle: selectedTopic.title })}
+                        className="px-6 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                        Start Assessment
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sprint 5: Topic Assessment ───
+
+function TopicAssessmentScreen({ topicId, topicTitle, onComplete, onNavigate }) {
+    const [questions, setQuestions] = useState([]);
+    const [currentIdx, setCurrentIdx] = useState(0);
+    const [answer, setAnswer] = useState("");
+    const [result, setResult] = useState(null);
+    const [showAnswer, setShowAnswer] = useState(false);
+    const [modelAnswer, setModelAnswer] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [quotaError, setQuotaError] = useState(false);
+    const [completed, setCompleted] = useState(false);
+    const [finalResult, setFinalResult] = useState(null);
+
+    useEffect(() => {
+        apiFetch(`/assessment/topic/${topicId}/questions`).then(r => {
+            if (r.status === 429) { setQuotaError(true); setLoading(false); return r.json(); }
+            return r.json();
+        }).then(data => {
+            if (data.questions) setQuestions(data.questions);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    }, [topicId]);
+
+    const handleShowAnswer = async () => {
+        const res = await apiFetch(`/assessment/topic/${topicId}/show-answer`, {
+            method: "POST", body: JSON.stringify({ question_id: questions[currentIdx].id })
+        });
+        const data = await res.json();
+        setModelAnswer(data.model_answer);
+        setShowAnswer(true);
+    };
+
+    const handleSubmit = async () => {
+        if (submitting) return;
+        setSubmitting(true);
+        try {
+            const res = await apiFetch(`/assessment/topic/${topicId}/submit`, {
+                method: "POST", body: JSON.stringify({ question_id: questions[currentIdx].id, answer, show_answer_used: showAnswer })
+            });
+            if (res.status === 429) { setQuotaError(true); setSubmitting(false); return; }
+            const data = await res.json();
+            setResult(data);
+        } catch {}
+        setSubmitting(false);
+    };
+
+    const handleNext = () => {
+        setAnswer(""); setResult(null); setShowAnswer(false); setModelAnswer("");
+        if (currentIdx < questions.length - 1) {
+            setCurrentIdx(currentIdx + 1);
+        } else {
+            // Complete assessment
+            apiFetch(`/assessment/topic/${topicId}/complete`, { method: "POST" }).then(r => r.json()).then(data => {
+                setFinalResult(data); setCompleted(true);
+            });
+        }
+    };
+
+    if (loading) return <LoadingSpinner />;
+
+    if (quotaError) {
+        return (
+            <div className="max-w-lg mx-auto p-6 text-center fade-in">
+                <div className="glass rounded-xl p-8">
+                    <div className="w-16 h-16 rounded-full bg-amber-500/20 mx-auto mb-4 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 className="text-xl font-bold mb-2">Daily Limit Reached</h2>
+                    <p className="text-slate-400 text-sm mb-4">You've used all your questions for today. Come back tomorrow!</p>
+                    <button onClick={() => onNavigate("dashboard")} className="px-5 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white">Back to Dashboard</button>
+                </div>
+            </div>
+        );
+    }
+
+    if (completed && finalResult) {
+        return (
+            <div className="max-w-lg mx-auto p-6 text-center fade-in">
+                <div className="glass-strong rounded-2xl p-8 glow-green">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 mx-auto mb-4 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold mb-2">Assessment Complete!</h2>
+                    <p className="text-slate-400 text-sm mb-4">{topicTitle}</p>
+                    <div className="flex justify-center mb-4"><Stars rating={finalResult.final_rating} size="lg" /></div>
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        <div className="glass rounded-lg p-3"><p className="text-slate-500 text-xs">Avg Score</p><p className="text-2xl font-bold text-indigo-400">{finalResult.average_score}</p></div>
+                        <div className="glass rounded-lg p-3"><p className="text-slate-500 text-xs">Questions</p><p className="text-2xl font-bold text-emerald-400">{finalResult.questions_answered}</p></div>
+                    </div>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={() => onNavigate("learning")} className="px-5 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white">Continue Learning</button>
+                        <button onClick={() => onNavigate("dashboard")} className="px-5 py-2 rounded-xl text-sm text-slate-400 hover:text-white">Dashboard</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const q = questions[currentIdx];
+    if (!q) return <div className="text-center py-12 text-slate-500">No questions available</div>;
+
+    return (
+        <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h1 className="text-lg font-bold">{topicTitle} Assessment</h1>
+                    <p className="text-slate-500 text-xs">Question {currentIdx + 1} of {questions.length}</p>
+                </div>
+                <button onClick={() => onNavigate("learning")} className="text-slate-500 hover:text-slate-300 text-xs">Exit</button>
+            </div>
+
+            {/* Progress */}
+            <div className="w-full bg-slate-800/50 rounded-full h-1.5 mb-6">
+                <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${((currentIdx + 1) / questions.length) * 100}%` }}></div>
+            </div>
+
+            {/* Question */}
+            <div className="glass-strong rounded-2xl p-6 mb-4 glow">
+                <p className="text-slate-200 text-base leading-relaxed">{q.question}</p>
+            </div>
+
+            {!result ? (
+                <>
+                    {/* Answer input */}
+                    <div className="glass rounded-2xl p-1 mb-4">
+                        <textarea value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Type your answer here..."
+                            className="w-full min-h-[120px] bg-transparent rounded-xl px-5 py-4 text-white placeholder-slate-600 resize-none text-sm leading-relaxed"/>
+                    </div>
+
+                    {/* Show Answer */}
+                    {showAnswer && (
+                        <div className="glass rounded-xl p-4 mb-4 border border-amber-500/20 fade-in">
+                            <p className="text-amber-400 text-xs font-semibold mb-1 uppercase tracking-wider">Model Answer (50% penalty applied)</p>
+                            <p className="text-slate-300 text-sm leading-relaxed">{modelAnswer}</p>
+                        </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between">
+                        <button onClick={handleShowAnswer} disabled={showAnswer}
+                            className="px-4 py-2 rounded-xl text-xs font-medium bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 border border-amber-500/20 transition-all disabled:opacity-30">
+                            {showAnswer ? "Answer Shown (-50%)" : "Show Answer"}
+                        </button>
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-600 text-xs">{answer.split(/\s+/).filter(Boolean).length} words</span>
+                            <button onClick={handleSubmit} disabled={submitting || !answer.trim()}
+                                className="px-6 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all disabled:opacity-30">
+                                {submitting ? "Submitting..." : "Submit"}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            ) : (
+                /* Result view */
+                <div className="fade-in">
+                    <div className="glass rounded-xl p-5 mb-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-white text-sm font-semibold">Your Score</span>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-2xl font-bold ${result.score.total_score >= 70 ? 'text-emerald-400' : result.score.total_score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{result.score.total_score}/100</span>
+                                <Stars rating={result.rating} />
+                            </div>
+                        </div>
+                        {result.score.penalty_applied && <p className="text-amber-400 text-xs mb-2">Penalty: {result.score.penalty_applied}</p>}
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                            <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px]">Keywords</p><p className="text-white text-sm font-bold">{result.score.keyword_score}%</p></div>
+                            <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px]">Detail</p><p className="text-white text-sm font-bold">{result.score.detail_score}%</p></div>
+                            <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px]">Relevance</p><p className="text-white text-sm font-bold">{result.score.relevance_score}%</p></div>
+                        </div>
+                        <p className="text-slate-400 text-xs">{result.score.feedback}</p>
+                    </div>
+
+                    {/* Correct answer */}
+                    <div className="glass rounded-xl p-4 mb-4 border border-emerald-500/20">
+                        <p className="text-emerald-400 text-xs font-semibold mb-1 uppercase tracking-wider">Correct Answer</p>
+                        <p className="text-slate-300 text-sm leading-relaxed">{result.correct_answer}</p>
+                    </div>
+
+                    <div className="text-right">
+                        <button onClick={handleNext}
+                            className="px-6 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                            {currentIdx < questions.length - 1 ? "Next Question" : "Finish Assessment"}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sprint 7: Review Screen ───
+
+function ReviewScreen({ onNavigate }) {
+    const [reviews, setReviews] = useState([]);
+    const [assessments, setAssessments] = useState([]);
+    const [selectedTopicResults, setSelectedTopicResults] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        Promise.all([
+            apiFetch("/review/items").then(r => r.json()),
+            apiFetch("/learning/plan").then(r => r.ok ? r.json() : { topics: [] }),
+        ]).then(([revs, plan]) => {
+            setReviews(revs);
+            const completed = (plan.topics || []).filter(t => t.status === "completed");
+            setAssessments(completed);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    }, []);
+
+    const viewAssessmentResults = async (topicId) => {
+        const res = await apiFetch(`/review/topic/${topicId}/assessment`);
+        const data = await res.json();
+        setSelectedTopicResults(data);
+    };
+
+    if (loading) return <LoadingSpinner />;
+
+    if (selectedTopicResults) {
+        return (
+            <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+                <button onClick={() => setSelectedTopicResults(null)} className="text-slate-400 hover:text-white text-xs mb-4 inline-block">Back to Review</button>
+                <h2 className="text-xl font-bold mb-4">Assessment Results</h2>
+                <div className="space-y-3">
+                    {(selectedTopicResults.results || []).map((r, i) => (
+                        <div key={i} className="glass rounded-xl p-4">
+                            <p className="text-slate-300 text-sm font-medium mb-2">{r.question_text}</p>
+                            <div className="grid grid-cols-2 gap-3 mb-2">
+                                <div><p className="text-slate-500 text-xs mb-1">Your Answer</p><p className="text-slate-400 text-sm bg-slate-800/30 rounded-lg p-2">{r.user_answer || "-- skipped --"}</p></div>
+                                <div><p className="text-emerald-400 text-xs mb-1">Correct Answer</p><p className="text-slate-300 text-sm bg-emerald-500/5 rounded-lg p-2">{r.correct_answer}</p></div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Stars rating={r.rating} />
+                                <span className={`text-sm font-bold ${r.score?.total_score >= 70 ? 'text-emerald-400' : r.score?.total_score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{r.score?.total_score || 0}/100</span>
+                                {r.show_answer_used && <span className="text-amber-400 text-[10px]">Used Show Answer</span>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+            <h1 className="text-2xl font-bold mb-6">Review & Revisit</h1>
+
+            {/* Marked for review */}
+            {reviews.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Marked for Review</h3>
+                    <div className="space-y-2">
+                        {reviews.map((r, i) => (
+                            <div key={i} className="glass rounded-xl p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.02]"
+                                onClick={() => onNavigate("learning", { topicId: r.topic_id })}>
+                                <div>
+                                    <p className="text-white text-sm font-medium">{r.topic_title}</p>
+                                    <p className="text-slate-500 text-xs">{r.interest_area}{r.dimension ? ` | ${r.dimension}` : ""}</p>
+                                </div>
+                                <span className="text-indigo-400 text-xs">Revisit</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Completed topics */}
+            <div>
+                <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Completed Topics</h3>
+                {assessments.length === 0 ? (
+                    <div className="glass rounded-xl p-6 text-center"><p className="text-slate-500 text-sm">No completed topics yet</p></div>
+                ) : (
+                    <div className="space-y-2">
+                        {assessments.map(t => (
+                            <div key={t.topic_id} className="glass rounded-xl p-4 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Stars rating={t.assessment_rating} />
+                                    <div>
+                                        <p className="text-white text-sm font-medium">{t.title}</p>
+                                        <p className="text-slate-500 text-xs">{t.interest_area}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => onNavigate("learning", { topicId: t.topic_id })}
+                                        className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all">Content</button>
+                                    <button onClick={() => viewAssessmentResults(t.topic_id)}
+                                        className="px-3 py-1.5 rounded-lg text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/10 transition-all">Results</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Interview Screens (existing, updated) ───
+
+function HomeScreen({ onStart, user }) {
+    const [name, setName] = useState(user?.full_name || "");
+    const [jobTitle, setJobTitle] = useState("");
+    const [micOk, setMicOk] = useState(null);
+    const [engine, setEngine] = useState("whisper");
+    const [detectedRole, setDetectedRole] = useState(null);
+
+    useEffect(() => {
+        (async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); setMicOk(true); } catch { setMicOk(false); } })();
+        // Auto-detect role from profile interests
+        apiFetch("/interview/detect-role").then(r => r.json()).then(data => {
+            if (data.role_name) {
+                setDetectedRole(data);
+                setJobTitle(data.role_name);
+            }
+        }).catch(() => {});
+    }, []);
+
+    return (
+        <div className="max-w-lg mx-auto p-4 md:p-6 fade-in">
+            <div className="glass-strong rounded-2xl p-8 glow">
+                <div className="text-center mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 mx-auto mb-3 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+                    </div>
+                    <h1 className="text-2xl font-bold mb-1">AI Interview Booth</h1>
+                    <p className="text-slate-400 text-sm">Voice-powered technical interview simulator</p>
+                </div>
+                {detectedRole && (
+                    <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-2.5 mb-3 fade-in">
+                        <p className="text-indigo-300 text-xs font-medium">Auto-detected from your profile:</p>
+                        <p className="text-indigo-400 text-sm font-semibold">{detectedRole.role_name}</p>
+                        <p className="text-slate-500 text-[10px]">Based on interests: {detectedRole.interests.join(", ")}</p>
+                    </div>
+                )}
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Your Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter your full name"
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Target Job Title / Role</label>
+                        <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. SDET, DevOps Engineer"
+                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                        <p className="text-slate-600 text-[10px] mt-1">Change this to get questions for a different role</p>
+                    </div>
+                    <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Speech Engine</label>
+                        <EnginePicker engine={engine} onChange={setEngine} />
+                    </div>
+                    <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm ${micOk === true ? 'bg-emerald-500/10 text-emerald-400' : micOk === false ? 'bg-red-500/10 text-red-400' : 'bg-slate-800/50 text-slate-400'}`}>
+                        <div className={`w-2 h-2 rounded-full ${micOk === true ? 'bg-emerald-400' : micOk === false ? 'bg-red-400' : 'bg-slate-500'}`}></div>
+                        {micOk === true ? "Microphone ready (recording required)" : micOk === false ? "Microphone access required for interview" : "Checking microphone..."}
+                    </div>
+                    <button onClick={() => name.trim() && jobTitle.trim() && micOk && onStart(name.trim(), jobTitle.trim(), engine)}
+                        disabled={!name.trim() || !jobTitle.trim() || !micOk}
+                        className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
+                        Start Interview
+                    </button>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">30</p><p className="text-slate-500 text-[10px]">Questions</p></div>
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">10</p><p className="text-slate-500 text-[10px]">Topics</p></div>
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">~1h</p><p className="text-slate-500 text-[10px]">Duration</p></div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function CameraPreview() {
+    const [time, setTime] = useState(new Date());
+    useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+    return (
+        <div className="fixed bottom-5 right-5 z-50">
+            <div className="glass rounded-xl overflow-hidden w-40 shadow-2xl">
+                <div className="bg-slate-800/80 h-24 flex items-center justify-center relative">
+                    <div className="text-center">
+                        <div className="w-9 h-9 rounded-full bg-slate-700 mx-auto mb-1 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/></svg>
+                        </div>
+                        <p className="text-slate-500 text-[10px]">Camera Feed</p>
+                    </div>
+                    <div className="absolute top-1.5 left-2 flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                        <span className="text-red-400 text-[8px] font-medium">REC</span>
+                    </div>
+                </div>
+                <div className="px-2 py-1 flex items-center justify-between bg-slate-900/50">
+                    <span className="text-slate-500 text-[9px]">LIVE</span>
+                    <span className="text-slate-400 text-[9px] font-mono">{time.toLocaleTimeString()}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function InterviewRoom({ sessionId, questions, engine, onFinish }) {
+    const [currentQ, setCurrentQ] = useState(0);
+    const [thinking, setThinking] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [showAnswer, setShowAnswer] = useState(false);
+    const [modelAnswer, setModelAnswer] = useState("");
+    const [loadingAnswer, setLoadingAnswer] = useState(false);
+    const [audioUrls, setAudioUrls] = useState({});
+    const timer = useTimer();
+    const recorder = useAudioRecorder();
+    const browserSpeech = useBrowserSpeech();
+    const localSpeech = useLocalSpeech(engine);
+    const speech = engine === "browser" ? browserSpeech : localSpeech;
+    const [editableTranscript, setEditableTranscript] = useState("");
+    const prevQRef = useRef(0);
+
+    useEffect(() => { timer.start(); }, []);
+    useEffect(() => { setEditableTranscript(speech.transcript); }, [speech.transcript]);
+    useEffect(() => {
+        if (currentQ !== prevQRef.current) {
+            speech.reset(); setEditableTranscript(""); setShowAnswer(false); setModelAnswer(""); prevQRef.current = currentQ;
+        }
+    }, [currentQ]);
+
+    const question = questions[currentQ];
+    const progress = ((currentQ + 1) / questions.length) * 100;
+
+    const audioBlobsRef = useRef({});
+    const handleMicStart = () => { speech.startListening(); recorder.startRecording(); };
+    const handleMicStop = async () => {
+        speech.stopListening();
+        const url = await recorder.stopRecording();
+        if (url) {
+            setAudioUrls(prev => ({ ...prev, [question.id]: url }));
+            // Save blob for server upload
+            try {
+                const resp = await fetch(url);
+                const blob = await resp.blob();
+                audioBlobsRef.current[question.id] = blob;
+            } catch(e) { console.error("Blob save error:", e); }
+        }
+    };
+
+    // Upload recording to server
+    const uploadRecording = async (questionId) => {
+        const blob = audioBlobsRef.current[questionId];
+        if (!blob) return;
+        try {
+            const formData = new FormData();
+            formData.append("audio", blob, "recording.webm");
+            formData.append("session_id", sessionId);
+            formData.append("question_id", String(questionId));
+            const token = getToken();
+            await fetch(`${API}/recording/upload`, {
+                method: "POST",
+                headers: token ? { "Authorization": `Bearer ${token}` } : {},
+                body: formData,
+            });
+        } catch(e) { console.error("Upload error:", e); }
+    };
+
+    const handleShowAnswer = async () => {
+        if (showAnswer) { setShowAnswer(false); return; }
+        setLoadingAnswer(true);
+        try {
+            const res = await fetch(`${API}/question/${question.id}/answer?session_id=${sessionId}`);
+            const data = await res.json();
+            setModelAnswer(data.model_answer); setShowAnswer(true);
+        } catch(e) { console.error(e); }
+        setLoadingAnswer(false);
+    };
+
+    const handleSubmit = async () => {
+        if (submitting || thinking) return;
+        if (speech.listening) await handleMicStop();
+        setSubmitting(true);
+        try {
+            // Upload recording to server first
+            await uploadRecording(question.id);
+            // Then submit the answer
+            await fetch(`${API}/answer/submit`, { method: "POST", headers: authHeaders(),
+                body: JSON.stringify({ session_id: sessionId, question_id: question.id, transcript: editableTranscript }) });
+        } catch (e) { console.error(e); }
+        setSubmitting(false); setThinking(true);
+        setTimeout(() => {
+            setThinking(false);
+            if (currentQ < questions.length - 1) setCurrentQ(currentQ + 1);
+            else { timer.stop(); onFinish(timer.format(), audioUrls); }
+        }, 2000);
+    };
+
+    const handleSkip = () => {
+        if (speech.listening) { speech.stopListening(); recorder.stopRecording(); }
+        fetch(`${API}/answer/submit`, { method: "POST", headers: authHeaders(),
+            body: JSON.stringify({ session_id: sessionId, question_id: question.id, transcript: "" }) }).catch(() => {});
+        setThinking(true);
+        setTimeout(() => {
+            setThinking(false);
+            if (currentQ < questions.length - 1) setCurrentQ(currentQ + 1);
+            else { timer.stop(); onFinish(timer.format(), audioUrls); }
+        }, 1500);
+    };
+
+    const isProcessing = speech.processing || false;
+    const isListening = speech.listening;
+
+    return (
+        <div className="min-h-screen flex flex-col p-4 md:p-6 fade-in">
+            <CameraPreview />
+            <div className="glass rounded-xl px-5 py-3 flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                    <TopicBadge topic={question.topic} difficulty={question.difficulty} />
+                    <span className="text-indigo-400 text-sm font-semibold">Q {currentQ + 1}/{questions.length}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    <span className="text-slate-500 text-xs px-2 py-1 rounded-lg bg-slate-800/50">{engine}</span>
+                    <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span className="text-white font-mono text-sm font-medium">{timer.format()}</span>
+                    </div>
+                </div>
+            </div>
+            <div className="w-full bg-slate-800/50 rounded-full h-1 mb-6">
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-1 rounded-full transition-all duration-700" style={{ width: `${progress}%` }}></div>
+            </div>
+            <div className="flex-1 max-w-3xl w-full mx-auto flex flex-col">
+                <div className="glass-strong rounded-2xl p-6 mb-4 glow fade-in" key={currentQ}>
+                    <div className="flex items-start gap-4">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex-shrink-0 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-indigo-400 text-xs font-semibold mb-2 uppercase tracking-wider">AI Interviewer</p>
+                            {thinking ? (
+                                <div className="flex items-center gap-1.5 py-2">
+                                    <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+                                    <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+                                    <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
+                                    <span className="text-slate-500 text-sm ml-2">Processing...</span>
+                                </div>
+                            ) : (<p className="text-slate-200 text-base leading-relaxed">{question.question}</p>)}
+                        </div>
+                    </div>
+                </div>
+                {showAnswer && (
+                    <div className="glass rounded-2xl p-5 mb-4 border border-emerald-500/20 fade-in">
+                        <p className="text-emerald-400 text-xs font-semibold mb-2 uppercase tracking-wider">Model Answer</p>
+                        <p className="text-slate-300 text-sm leading-relaxed">{modelAnswer}</p>
+                    </div>
+                )}
+                <div className="flex-1 flex flex-col">
+                    <div className="flex items-center justify-center gap-6 mb-4">
+                        <MicButton listening={isListening} processing={isProcessing} onStart={handleMicStart} onStop={handleMicStop} />
+                        <WaveIndicator listening={isListening} />
+                        <div className="text-left">
+                            <p className={`text-sm font-medium ${isProcessing ? 'text-amber-400' : isListening ? 'text-red-400' : audioUrls[question.id] ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                {isProcessing ? "Transcribing..." : isListening ? "Listening... speak now" : audioUrls[question.id] ? "Recording saved" : "Record your answer (required)"}
+                            </p>
+                            {!audioUrls[question.id] && !isListening && (
+                                <p className="text-amber-400/70 text-[10px]">Voice recording is mandatory</p>
+                            )}
+                        </div>
+                    </div>
+                    {audioUrls[question.id] && !isListening && (
+                        <div className="flex items-center justify-center mb-3">
+                            <audio controls src={audioUrls[question.id]} className="h-8 opacity-70" style={{ filter: "invert(1)" }}></audio>
+                        </div>
+                    )}
+                    <div className="glass rounded-2xl p-1 flex-1 flex flex-col mb-4 relative">
+                        {isProcessing && (
+                            <div className="absolute top-2 right-3 flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
+                                <span className="text-amber-400 text-[10px] font-medium">PROCESSING</span>
+                            </div>
+                        )}
+                        <textarea value={editableTranscript} onChange={e => setEditableTranscript(e.target.value)} disabled={thinking}
+                            placeholder={isListening ? "Speak now..." : audioUrls[question.id] ? "Edit your transcript if needed..." : "Record your answer first, then edit the transcript here."}
+                            className="flex-1 min-h-[120px] bg-transparent rounded-xl px-5 py-4 text-white placeholder-slate-600 resize-none text-sm leading-relaxed disabled:opacity-40" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <p className="text-slate-600 text-xs">{editableTranscript.split(/\s+/).filter(Boolean).length} words</p>
+                            <button onClick={handleShowAnswer} disabled={loadingAnswer}
+                                className="px-4 py-2 rounded-xl text-xs font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/20 transition-all disabled:opacity-50">
+                                {loadingAnswer ? "Loading..." : showAnswer ? "Hide Answer" : "Show Answer"}
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button onClick={handleSkip} disabled={thinking || submitting}
+                                className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-300 hover:bg-slate-800/50 transition-all disabled:opacity-30">Skip</button>
+                            <button onClick={handleSubmit} disabled={thinking || submitting || !editableTranscript.trim() || !audioUrls[question.id]}
+                                title={!audioUrls[question.id] ? "Record your answer first" : ""}
+                                className="px-8 py-3 rounded-xl font-semibold text-sm transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
+                                {submitting ? "Submitting..." : !audioUrls[question.id] ? "Record First" : currentQ === questions.length - 1 ? "Finish" : "Submit"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ResultsPage({ scorecard, questionReview, audioUrls: localAudioUrls, onRestart, sessionId }) {
+    const [animScore, setAnimScore] = useState(0);
+    const [expandedQ, setExpandedQ] = useState(null);
+    const [serverAudioUrls, setServerAudioUrls] = useState({});
+    const score = scorecard.overall_score;
+
+    // Merge local blob URLs with server URLs (server URLs persist after refresh)
+    const audioUrls = { ...serverAudioUrls, ...localAudioUrls };
+
+    useEffect(() => {
+        // Load server-side recordings for this session
+        if (sessionId) {
+            apiFetch(`/recording/list/${sessionId}`).then(r => r.json()).then(data => {
+                setServerAudioUrls(data);
+            }).catch(() => {});
+        }
+    }, [sessionId]);
+
+    useEffect(() => {
+        if (score === 0) return;
+        let s = 0; const step = Math.max(1500 / score, 10);
+        const t = setInterval(() => { s++; setAnimScore(s); if (s >= score) clearInterval(t); }, step);
+        return () => clearInterval(t);
+    }, [score]);
+
+    const scoreColor = score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400";
+    const scoreBg = score >= 75 ? "from-emerald-500/20 to-emerald-500/5" : score >= 50 ? "from-amber-500/20 to-amber-500/5" : "from-red-500/20 to-red-500/5";
+    const topicEntries = Object.entries(scorecard.topic_scores || {}).sort((a,b) => b[1] - a[1]);
+
+    return (
+        <div className="min-h-screen p-4 md:p-8 fade-in">
+            <div className="max-w-3xl mx-auto">
+                <div className="text-center mb-8">
+                    <p className="text-indigo-400 text-xs font-semibold uppercase tracking-widest mb-2">Interview Complete</p>
+                    <h1 className="text-3xl font-bold mb-1">Your Scorecard</h1>
+                    <p className="text-slate-500 text-sm">{scorecard.candidate_name} | {scorecard.job_title} | {scorecard.time_taken}</p>
+                </div>
+                <div className={`glass-strong rounded-2xl p-8 text-center mb-6 ${score >= 75 ? 'glow-green' : 'glow'}`}>
+                    <div className={`inline-flex items-center justify-center w-36 h-36 rounded-full bg-gradient-to-b ${scoreBg} mb-4`}>
+                        <div><span className={`text-5xl font-black ${scoreColor}`}>{animScore}</span><span className="text-slate-500 text-xl font-medium">/100</span></div>
+                    </div>
+                    <div className="flex justify-center mt-2"><Stars rating={Math.round(score / 20)} size="lg" /></div>
+                </div>
+                <div className="glass rounded-2xl p-6 mb-6">
+                    <h3 className="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Topic Breakdown</h3>
+                    <div className="space-y-3">
+                        {topicEntries.map(([topic, s]) => (
+                            <div key={topic} className="flex items-center gap-3">
+                                <span className="text-slate-400 text-xs w-28 truncate">{topic}</span>
+                                <div className="flex-1 bg-slate-800/50 rounded-full h-2.5">
+                                    <div className={`h-2.5 rounded-full transition-all duration-1000 ${s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${s}%` }}></div>
+                                </div>
+                                <span className="text-slate-400 text-xs font-mono w-10 text-right">{s}/100</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mb-6">
+                    <div className="glass rounded-2xl p-6">
+                        <h3 className="text-emerald-400 text-sm font-semibold mb-3 uppercase tracking-wider">Strengths</h3>
+                        <ul className="space-y-2">{(scorecard.strengths || []).map((s,i) => (<li key={i} className="flex items-start gap-2"><span className="text-emerald-500 mt-0.5">&#8226;</span><span className="text-slate-300 text-sm">{s}</span></li>))}</ul>
+                    </div>
+                    <div className="glass rounded-2xl p-6">
+                        <h3 className="text-amber-400 text-sm font-semibold mb-3 uppercase tracking-wider">Improvements</h3>
+                        <ul className="space-y-2">{(scorecard.improvements || []).map((s,i) => (<li key={i} className="flex items-start gap-2"><span className="text-amber-500 font-bold mt-0.5">{i+1}.</span><span className="text-slate-300 text-sm">{s}</span></li>))}</ul>
+                    </div>
+                </div>
+                <div className="glass rounded-2xl overflow-hidden mb-6">
+                    <div className="px-6 py-4 border-b border-slate-700/30">
+                        <h3 className="text-white text-sm font-semibold uppercase tracking-wider">Deep Dive Review</h3>
+                        <p className="text-slate-500 text-xs mt-1">Click any question to see full analysis</p>
+                    </div>
+                    <div className="divide-y divide-slate-700/20 max-h-[700px] overflow-y-auto">
+                        {(questionReview || []).map((qr, i) => {
+                            const isOpen = expandedQ === i;
+                            const sc = qr.score;
+                            return (
+                                <div key={i}>
+                                    <button onClick={() => setExpandedQ(isOpen ? null : i)}
+                                        className="w-full px-6 py-3.5 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-indigo-400 text-xs font-bold w-7">Q{i+1}</span>
+                                            <span className="text-slate-500 text-xs w-24">{qr.topic}</span>
+                                            <span className="text-slate-300 text-sm truncate max-w-[300px]">{qr.question_text.substring(0, 60)}...</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            {audioUrls[qr.question_id] && <span className="text-slate-600 text-[10px]">REC</span>}
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${sc.total_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' : sc.total_score >= 40 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                {sc.total_score}/100
+                                            </span>
+                                            <svg className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                                        </div>
+                                    </button>
+                                    {isOpen && (
+                                        <div className="px-6 pb-5 fade-in">
+                                            <p className="text-slate-300 text-sm mb-3 font-medium">{qr.question_text}</p>
+                                            {audioUrls[qr.question_id] && (
+                                                <div className="mb-3"><p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">Your Recording</p>
+                                                    <audio controls src={audioUrls[qr.question_id]} className="w-full h-8 opacity-70" style={{ filter: "invert(1)" }}></audio></div>
+                                            )}
+                                            <div className="mb-3"><p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">Your Answer</p>
+                                                <p className="text-slate-400 text-sm italic bg-slate-800/30 rounded-xl p-3">{qr.transcript ? `"${qr.transcript}"` : "-- Skipped --"}</p></div>
+                                            {qr.model_answer && (
+                                                <div className="mb-3"><p className="text-emerald-400 text-xs mb-1 uppercase tracking-wider">Expected Answer</p>
+                                                    <p className="text-slate-300 text-sm bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3">{qr.model_answer}</p></div>
+                                            )}
+                                            <div className="grid grid-cols-3 gap-2 mb-3">
+                                                <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px] uppercase">Keywords</p><p className="text-white text-sm font-bold">{sc.keyword_score}%</p></div>
+                                                <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px] uppercase">Detail</p><p className="text-white text-sm font-bold">{sc.detail_score}%</p></div>
+                                                <div className="bg-slate-800/30 rounded-lg p-2 text-center"><p className="text-slate-500 text-[10px] uppercase">Relevance</p><p className="text-white text-sm font-bold">{sc.relevance_score}%</p></div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                                {(sc.matched_keywords || []).map((k, j) => (<span key={j} className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-400">{k}</span>))}
+                                                {(sc.missed_keywords || []).map((k, j) => (<span key={j} className="px-2 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400 line-through">{k}</span>))}
+                                            </div>
+                                            <p className="text-slate-400 text-xs">{sc.feedback}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                <div className="text-center pb-8">
+                    <button onClick={onRestart} className="px-10 py-3.5 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition-all">Back to Dashboard</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Main App ───
+
+function App() {
+    const [authState, setAuthState] = useState("checking"); // checking, login, register, change_password, authenticated
+    const [screen, setScreen] = useState("dashboard");
+    const [screenParams, setScreenParams] = useState({});
+    const [user, setUserState] = useState(null);
+    const [error, setError] = useState(null);
+
+    // Interview state
+    const [sessionId, setSessionId] = useState(null);
+    const [questions, setQuestions] = useState([]);
+    const [engine, setEngine] = useState("whisper");
+    const [scorecard, setScorecard] = useState(null);
+    const [questionReview, setQuestionReview] = useState([]);
+    const [audioUrls, setAudioUrls] = useState({});
+
+    useEffect(() => {
+        const token = getToken();
+        const savedUser = getUser();
+        if (token && savedUser) {
+            setUserState(savedUser);
+            if (savedUser.is_first_login) setAuthState("change_password");
+            else setAuthState("authenticated");
+        } else {
+            setAuthState("login");
+        }
+    }, []);
+
+    const handleLogin = (data) => {
+        setToken(data.token);
+        setUser(data);
+        setUserState(data);
+        if (data.is_first_login) {
+            setAuthState("change_password");
+        } else {
+            setAuthState("authenticated");
+            setScreen("dashboard");
+        }
+    };
+
+    const handleRegister = (data) => {
+        // After registration, go to login
+        setAuthState("login");
+    };
+
+    const handlePasswordChanged = () => {
+        const u = getUser();
+        if (u) { u.is_first_login = false; setUser(u); setUserState(u); }
+        setAuthState("authenticated");
+        setScreen("dashboard");
+    };
+
+    const handleLogout = () => {
+        clearAuth();
+        setAuthState("login");
+        setUserState(null);
+        setScreen("dashboard");
+        setSessionId(null); setQuestions([]); setScorecard(null); setQuestionReview([]);
+    };
+
+    const navigate = (target, params = {}) => {
+        setScreenParams(params);
+        setScreen(target);
+        setError(null);
+    };
+
+    // Interview handlers
+    const handleStartInterview = async (name, jobTitle, selectedEngine) => {
+        setError(null); setEngine(selectedEngine);
+        try {
+            const res = await fetch(`${API}/session/start`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ candidate_name: name, job_title: jobTitle }) });
+            const data = await res.json();
+            setSessionId(data.session_id);
+            const qRes = await fetch(`${API}/questions?session_id=${data.session_id}`, { headers: authHeaders() });
+            const qData = await qRes.json();
+            setQuestions(qData);
+            setScreen("interview_room");
+        } catch { setError("Cannot connect to backend."); }
+    };
+
+    const handleFinishInterview = async (timeTaken, recordedAudioUrls) => {
+        setAudioUrls(recordedAudioUrls || {});
+        try {
+            const res = await fetch(`${API}/session/finish`, { method: "POST", headers: authHeaders(),
+                body: JSON.stringify({ session_id: sessionId, time_taken: timeTaken }) });
+            const data = await res.json();
+            setScorecard(data.scorecard); setQuestionReview(data.question_review); setScreen("results");
+        } catch { setError("Failed to get results."); }
+    };
+
+    if (authState === "checking") return <LoadingSpinner />;
+    if (authState === "login") return <LoginScreen onLogin={handleLogin} onSwitchToRegister={() => setAuthState("register")} />;
+    if (authState === "register") return <RegisterScreen onRegister={handleRegister} onSwitchToLogin={() => setAuthState("login")} />;
+    if (authState === "change_password") return <ChangePasswordScreen onComplete={handlePasswordChanged} />;
+
+    // Authenticated app
+    const showNav = !["interview_room", "results"].includes(screen);
+
+    return (
+        <div className="relative min-h-screen">
+            {showNav && <NavBar screen={screen} onNavigate={navigate} onLogout={handleLogout} userName={user?.full_name || ""} />}
+            {error && (
+                <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-red-500/20 border border-red-500/30 text-red-300 px-6 py-3 rounded-xl text-sm fade-in">
+                    {error}<button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-red-300">&times;</button>
+                </div>
+            )}
+
+            {screen === "dashboard" && <DashboardScreen onNavigate={navigate} />}
+            {screen === "profile" && <ProfileScreen onNavigate={navigate} />}
+            {screen === "history" && <SessionHistoryScreen />}
+            {screen === "learning" && <LearningScreen initialTopicId={screenParams.topicId} onNavigate={navigate} />}
+            {screen === "assessment" && <TopicAssessmentScreen topicId={screenParams.topicId} topicTitle={screenParams.topicTitle} onComplete={() => navigate("learning")} onNavigate={navigate} />}
+            {screen === "review" && <ReviewScreen onNavigate={navigate} />}
+            {screen === "interview" && <HomeScreen onStart={handleStartInterview} user={user} />}
+            {screen === "interview_room" && <InterviewRoom sessionId={sessionId} questions={questions} engine={engine} onFinish={handleFinishInterview} />}
+            {screen === "results" && <ResultsPage scorecard={scorecard} questionReview={questionReview} audioUrls={audioUrls} onRestart={() => navigate("dashboard")} sessionId={sessionId} />}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
