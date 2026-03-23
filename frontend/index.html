@@ -1402,16 +1402,18 @@ function ReviewScreen({ onNavigate }) {
 
 // ─── Interview Screens (existing, updated) ───
 
-function HomeScreen({ onStart, user }) {
+function HomeScreen({ onStart, onStartJD, user }) {
     const [name, setName] = useState(user?.full_name || "");
     const [jobTitle, setJobTitle] = useState("");
+    const [jobDescription, setJobDescription] = useState("");
     const [micOk, setMicOk] = useState(null);
     const [engine, setEngine] = useState("whisper");
     const [detectedRole, setDetectedRole] = useState(null);
+    const [mode, setMode] = useState("jd"); // "jd" = job description, "role" = role-based
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         (async () => { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); setMicOk(true); } catch { setMicOk(false); } })();
-        // Auto-detect role from profile interests
         apiFetch("/interview/detect-role").then(r => r.json()).then(data => {
             if (data.role_name) {
                 setDetectedRole(data);
@@ -1419,6 +1421,13 @@ function HomeScreen({ onStart, user }) {
             }
         }).catch(() => {});
     }, []);
+
+    const handleStartJD = async () => {
+        if (!name.trim() || !jobDescription.trim() || !micOk) return;
+        setLoading(true);
+        await onStartJD(name.trim(), jobDescription.trim(), engine);
+        setLoading(false);
+    };
 
     return (
         <div className="max-w-lg mx-auto p-4 md:p-6 fade-in">
@@ -1430,25 +1439,52 @@ function HomeScreen({ onStart, user }) {
                     <h1 className="text-2xl font-bold mb-1">AI Interview Booth</h1>
                     <p className="text-slate-400 text-sm">Voice-powered technical interview simulator</p>
                 </div>
-                {detectedRole && (
+
+                {/* Mode Toggle */}
+                <div className="flex bg-slate-800/60 rounded-xl p-1 mb-4">
+                    <button onClick={() => setMode("jd")}
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${mode === "jd" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-slate-300"}`}>
+                        Job Description (AI)
+                    </button>
+                    <button onClick={() => setMode("role")}
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${mode === "role" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-slate-300"}`}>
+                        Quick Role-Based
+                    </button>
+                </div>
+
+                {detectedRole && mode === "role" && (
                     <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-2.5 mb-3 fade-in">
                         <p className="text-indigo-300 text-xs font-medium">Auto-detected from your profile:</p>
                         <p className="text-indigo-400 text-sm font-semibold">{detectedRole.role_name}</p>
                         <p className="text-slate-500 text-[10px]">Based on interests: {detectedRole.interests.join(", ")}</p>
                     </div>
                 )}
+
                 <div className="space-y-3">
                     <div>
                         <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Your Name</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter your full name"
                             className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
                     </div>
-                    <div>
-                        <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Target Job Title / Role</label>
-                        <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. SDET, DevOps Engineer"
-                            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
-                        <p className="text-slate-600 text-[10px] mt-1">Change this to get questions for a different role</p>
-                    </div>
+
+                    {mode === "jd" ? (
+                        <div>
+                            <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Paste Job Description</label>
+                            <textarea value={jobDescription} onChange={e => setJobDescription(e.target.value)}
+                                placeholder="Paste the full job description here... AI will generate tailored interview questions based on the required skills, responsibilities, and qualifications mentioned."
+                                rows={6}
+                                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all resize-none"/>
+                            <p className="text-slate-600 text-[10px] mt-1">{jobDescription.length} chars {jobDescription.length < 50 && jobDescription.length > 0 ? "(min 50 required)" : ""}</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wider">Target Job Title / Role</label>
+                            <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. SDET, DevOps Engineer"
+                                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all"/>
+                            <p className="text-slate-600 text-[10px] mt-1">Uses pre-built question bank (no AI needed)</p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Speech Engine</label>
                         <EnginePicker engine={engine} onChange={setEngine} />
@@ -1457,17 +1493,43 @@ function HomeScreen({ onStart, user }) {
                         <div className={`w-2 h-2 rounded-full ${micOk === true ? 'bg-emerald-400' : micOk === false ? 'bg-red-400' : 'bg-slate-500'}`}></div>
                         {micOk === true ? "Microphone ready (recording required)" : micOk === false ? "Microphone access required for interview" : "Checking microphone..."}
                     </div>
-                    <button onClick={() => name.trim() && jobTitle.trim() && micOk && onStart(name.trim(), jobTitle.trim(), engine)}
-                        disabled={!name.trim() || !jobTitle.trim() || !micOk}
-                        className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
-                        Start Interview
-                    </button>
+
+                    {mode === "jd" ? (
+                        <button onClick={handleStartJD}
+                            disabled={!name.trim() || jobDescription.length < 50 || !micOk || loading}
+                            className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
+                            {loading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    AI is preparing your interview...
+                                </span>
+                            ) : "Start AI Interview"}
+                        </button>
+                    ) : (
+                        <button onClick={() => name.trim() && jobTitle.trim() && micOk && onStart(name.trim(), jobTitle.trim(), engine)}
+                            disabled={!name.trim() || !jobTitle.trim() || !micOk}
+                            className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
+                            Start Interview
+                        </button>
+                    )}
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">30</p><p className="text-slate-500 text-[10px]">Questions</p></div>
-                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">10</p><p className="text-slate-500 text-[10px]">Topics</p></div>
-                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">~1h</p><p className="text-slate-500 text-[10px]">Duration</p></div>
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">{mode === "jd" ? "15" : "30"}</p><p className="text-slate-500 text-[10px]">Questions</p></div>
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">{mode === "jd" ? "AI" : "10"}</p><p className="text-slate-500 text-[10px]">{mode === "jd" ? "Generated" : "Topics"}</p></div>
+                    <div className="glass rounded-lg py-2"><p className="text-indigo-400 text-lg font-bold">{mode === "jd" ? "~30m" : "~1h"}</p><p className="text-slate-500 text-[10px]">Duration</p></div>
                 </div>
+                {mode === "jd" && (
+                    <div className="mt-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3">
+                        <p className="text-indigo-300 text-xs font-medium mb-1">How it works:</p>
+                        <ul className="text-slate-400 text-[11px] space-y-0.5">
+                            <li>1. Paste any job description</li>
+                            <li>2. AI generates tailored interview questions</li>
+                            <li>3. Questions are read aloud by voice</li>
+                            <li>4. Answer with your microphone</li>
+                            <li>5. Get detailed scoring and feedback</li>
+                        </ul>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1508,6 +1570,9 @@ function InterviewRoom({ sessionId, questions, engine, onFinish }) {
     const [modelAnswer, setModelAnswer] = useState("");
     const [loadingAnswer, setLoadingAnswer] = useState(false);
     const [audioUrls, setAudioUrls] = useState({});
+    const [voiceEnabled, setVoiceEnabled] = useState(true);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const synthRef = useRef(window.speechSynthesis);
     const timer = useTimer();
     const recorder = useAudioRecorder();
     const browserSpeech = useBrowserSpeech();
@@ -1516,13 +1581,44 @@ function InterviewRoom({ sessionId, questions, engine, onFinish }) {
     const [editableTranscript, setEditableTranscript] = useState("");
     const prevQRef = useRef(0);
 
+    // Voice-over: speak a question aloud
+    const speakQuestion = (text) => {
+        if (!voiceEnabled || !window.speechSynthesis) return;
+        synthRef.current.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.95;
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+        // Prefer a natural voice
+        const voices = synthRef.current.getVoices();
+        const preferred = voices.find(v => v.name.includes("Google") || v.name.includes("Microsoft") || v.name.includes("Samantha"));
+        if (preferred) utter.voice = preferred;
+        utter.onstart = () => setIsSpeaking(true);
+        utter.onend = () => setIsSpeaking(false);
+        utter.onerror = () => setIsSpeaking(false);
+        synthRef.current.speak(utter);
+    };
+
     useEffect(() => { timer.start(); }, []);
     useEffect(() => { setEditableTranscript(speech.transcript); }, [speech.transcript]);
     useEffect(() => {
         if (currentQ !== prevQRef.current) {
             speech.reset(); setEditableTranscript(""); setShowAnswer(false); setModelAnswer(""); prevQRef.current = currentQ;
         }
+        // Speak the new question aloud
+        if (questions[currentQ]) {
+            setTimeout(() => speakQuestion(questions[currentQ].question), 500);
+        }
+        return () => { synthRef.current.cancel(); };
     }, [currentQ]);
+
+    // Speak first question on mount
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (questions[0]) speakQuestion("Welcome to your interview. Let's begin. " + questions[0].question);
+        }, 1000);
+        return () => { clearTimeout(timer); synthRef.current.cancel(); };
+    }, []);
 
     const question = questions[currentQ];
     const progress = ((currentQ + 1) / questions.length) * 100;
@@ -1632,7 +1728,23 @@ function InterviewRoom({ sessionId, questions, engine, onFinish }) {
                             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
                         </div>
                         <div className="flex-1">
-                            <p className="text-indigo-400 text-xs font-semibold mb-2 uppercase tracking-wider">AI Interviewer</p>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-indigo-400 text-xs font-semibold uppercase tracking-wider">AI Interviewer</p>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => speakQuestion(question.question)} className="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all" title="Replay question">
+                                        <svg className={`w-4 h-4 ${isSpeaking ? 'text-indigo-400 animate-pulse' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg>
+                                    </button>
+                                    <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) synthRef.current.cancel(); }}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${voiceEnabled ? 'bg-indigo-600/30 text-indigo-400' : 'bg-slate-700 text-slate-500'}`}
+                                        title={voiceEnabled ? "Mute voice" : "Unmute voice"}>
+                                        {voiceEnabled ? (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg>
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
                             {thinking ? (
                                 <div className="flex items-center gap-1.5 py-2">
                                     <div className="w-2 h-2 rounded-full bg-indigo-400 thinking-dot"></div>
@@ -1836,6 +1948,698 @@ function ResultsPage({ scorecard, questionReview, audioUrls: localAudioUrls, onR
 
 // ─── Main App ───
 
+// ═══════════════════════════════════════════════════
+// Phase 2: AI Voice Interview Screens
+// ═══════════════════════════════════════════════════
+
+function AIInterviewHub({ onNavigate }) {
+    const [resumes, setResumes] = useState([]);
+    const [interviews, setInterviews] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [llmStatus, setLlmStatus] = useState(null);
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
+    const fileRef = useRef(null);
+    const user = getUser();
+
+    useEffect(() => {
+        loadData();
+        fetch(`${API}/config/llm-status`).then(r => r.json()).then(setLlmStatus).catch(() => {});
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [rRes, iRes] = await Promise.all([
+                apiFetch("/resume/list"), apiFetch("/ai-interview/list")
+            ]);
+            setResumes(await rRes.json());
+            setInterviews(await iRes.json());
+        } catch(e) { setError("Failed to load data"); }
+        setLoading(false);
+    };
+
+    const handleUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true); setError(null); setSuccess(null);
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+            const res = await fetch(`${API}/resume/upload`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${getToken()}` },
+                body: formData,
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setSuccess("Resume uploaded and parsed successfully!");
+            loadData();
+        } catch(e) { setError(e.message); }
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
+    };
+
+    const handleCreateInterview = async (resumeId, interestArea) => {
+        setCreating(true); setError(null);
+        try {
+            const res = await apiFetch("/ai-interview/create", {
+                method: "POST",
+                body: JSON.stringify({ resume_id: resumeId, interest_area: interestArea }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setSuccess("Interview created! Click 'Start' to begin.");
+            loadData();
+        } catch(e) { setError(e.message); }
+        setCreating(false);
+    };
+
+    const statusColors = { pending: "text-yellow-400 bg-yellow-400/10", in_progress: "text-blue-400 bg-blue-400/10", completed: "text-green-400 bg-green-400/10", evaluated: "text-purple-400 bg-purple-400/10" };
+
+    if (loading) return <LoadingSpinner />;
+
+    return (
+        <div className="max-w-5xl mx-auto px-4 py-6 fade-in">
+            {/* Header */}
+            <div className="mb-8">
+                <h1 className="text-2xl font-bold text-white mb-2">AI Voice Interview</h1>
+                <p className="text-slate-400 text-sm">Upload your resume, get AI-generated questions based on your interest area, and practice with an AI interviewer.</p>
+            </div>
+
+            {/* LLM Status Banner */}
+            {llmStatus && !llmStatus.any_available && (
+                <div className="glass border-amber-500/30 bg-amber-500/10 rounded-xl p-4 mb-6">
+                    <p className="text-amber-300 text-sm font-medium">No LLM API keys configured</p>
+                    <p className="text-amber-400/70 text-xs mt-1">Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY environment variable to enable AI features.</p>
+                </div>
+            )}
+
+            {error && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-xl text-sm mb-4">{error}<button onClick={() => setError(null)} className="ml-3 text-red-400">&times;</button></div>}
+            {success && <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-4 py-3 rounded-xl text-sm mb-4">{success}<button onClick={() => setSuccess(null)} className="ml-3 text-emerald-400">&times;</button></div>}
+
+            {/* Step 1: Upload Resume */}
+            <div className="glass rounded-2xl p-6 mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center text-indigo-300 font-bold text-sm">1</div>
+                    <h2 className="text-lg font-semibold text-white">Upload Resume</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                    <label className={`cursor-pointer px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${uploading ? 'bg-slate-700 text-slate-400' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
+                        {uploading ? (
+                            <span className="flex items-center gap-2">
+                                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                Parsing...
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                                {resumes.length > 0 ? "Replace Resume" : "Upload PDF / DOCX"}
+                            </span>
+                        )}
+                        <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleUpload} className="hidden" disabled={uploading} />
+                    </label>
+                    <span className="text-slate-500 text-xs">{resumes.length > 0 ? "Uploading a new resume will replace the existing one" : "Supported: PDF, DOCX, TXT (max 5MB)"}</span>
+                </div>
+
+                {/* Uploaded Resumes */}
+                {resumes.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                        {resumes.map(r => (
+                            <div key={r.id} className="glass-strong rounded-xl p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-white text-sm font-medium">{r.filename}</p>
+                                        <p className="text-slate-500 text-xs mt-1">
+                                            {r.parsed_data?.skills?.slice(0,5).join(", ") || "No skills detected"}
+                                            {r.parsed_data?.skills?.length > 5 && ` +${r.parsed_data.skills.length - 5} more`}
+                                        </p>
+                                        <p className="text-slate-600 text-xs mt-0.5">
+                                            {r.parsed_data?.experience_level || "?"} level | {r.parsed_data?.experience_years || 0} yrs exp
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <p className="text-slate-600 text-xs">{new Date(r.uploaded_at).toLocaleDateString()}</p>
+                                        <button onClick={async () => {
+                                            if (!confirm("Delete this resume?")) return;
+                                            try {
+                                                await apiFetch(`/resume/${r.id}`, { method: "DELETE" });
+                                                loadData();
+                                            } catch(e) { setError("Failed to delete"); }
+                                        }} className="text-red-400/50 hover:text-red-400 transition-colors" title="Delete resume">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Step 2: Create Interview */}
+            {resumes.length > 0 && (
+                <div className="glass rounded-2xl p-6 mb-6">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 rounded-full bg-emerald-600/30 flex items-center justify-center text-emerald-300 font-bold text-sm">2</div>
+                        <h2 className="text-lg font-semibold text-white">Start AI Interview</h2>
+                    </div>
+                    <p className="text-slate-400 text-sm mb-4">Select a resume and your interest area to generate personalized interview questions.</p>
+
+                    <CreateInterviewForm
+                        resumes={resumes}
+                        userInterests={user?.interest_areas || []}
+                        creating={creating}
+                        onSubmit={handleCreateInterview}
+                    />
+                </div>
+            )}
+
+            {/* Step 3: Your Interviews */}
+            {interviews.length > 0 && (
+                <div className="glass rounded-2xl p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 rounded-full bg-purple-600/30 flex items-center justify-center text-purple-300 font-bold text-sm">3</div>
+                        <h2 className="text-lg font-semibold text-white">Your Interviews</h2>
+                    </div>
+                    <div className="space-y-3">
+                        {interviews.map(iv => (
+                            <div key={iv.id} className="glass-strong rounded-xl p-4 flex items-center justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-white text-sm font-medium">{iv.interest_area} Interview</p>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[iv.status] || 'text-slate-400 bg-slate-400/10'}`}>
+                                            {iv.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-500 text-xs mt-1">{iv.total_questions} questions | {iv.job_role}</p>
+                                    <p className="text-slate-600 text-xs">{new Date(iv.created_at).toLocaleDateString()}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    {iv.status === "pending" && (
+                                        <button onClick={() => onNavigate("ai_interview_room", { interviewId: iv.id })}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all">
+                                            Start
+                                        </button>
+                                    )}
+                                    {iv.status === "in_progress" && (
+                                        <button onClick={() => onNavigate("ai_interview_room", { interviewId: iv.id })}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-all">
+                                            Resume
+                                        </button>
+                                    )}
+                                    {iv.status === "completed" && (
+                                        <button onClick={() => onNavigate("ai_interview_room", { interviewId: iv.id, evaluate: true })}
+                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium transition-all">
+                                            Evaluate
+                                        </button>
+                                    )}
+                                    {iv.status === "evaluated" && (
+                                        <button onClick={() => onNavigate("ai_results", { interviewId: iv.id })}
+                                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-medium transition-all">
+                                            View Results
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CreateInterviewForm({ resumes, userInterests, creating, onSubmit }) {
+    const [selectedResume, setSelectedResume] = useState(resumes[0]?.id || "");
+    const [selectedInterest, setSelectedInterest] = useState(userInterests[0] || "");
+    const [allInterests, setAllInterests] = useState([]);
+
+    useEffect(() => {
+        fetch(`${API}/config/interest-areas`).then(r => r.json()).then(setAllInterests).catch(() => {});
+    }, []);
+
+    return (
+        <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px]">
+                <label className="text-slate-400 text-xs mb-1 block">Resume</label>
+                <select value={selectedResume} onChange={e => setSelectedResume(e.target.value)}
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-white text-sm">
+                    {resumes.map(r => <option key={r.id} value={r.id}>{r.filename}</option>)}
+                </select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+                <label className="text-slate-400 text-xs mb-1 block">Interest Area (questions will focus on this)</label>
+                <select value={selectedInterest} onChange={e => setSelectedInterest(e.target.value)}
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-white text-sm">
+                    {(allInterests.length > 0 ? allInterests : userInterests).map(i =>
+                        <option key={i} value={i}>{i}</option>
+                    )}
+                </select>
+            </div>
+            <button onClick={() => onSubmit(selectedResume, selectedInterest)} disabled={creating || !selectedResume}
+                className={`px-6 py-2.5 rounded-xl font-medium text-sm transition-all ${creating ? 'bg-slate-700 text-slate-400' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
+                {creating ? (
+                    <span className="flex items-center gap-2">
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Generating Questions...
+                    </span>
+                ) : "Create Interview"}
+            </button>
+        </div>
+    );
+}
+
+function AIInterviewRoom({ interviewId, evaluateMode, onNavigate }) {
+    const [interview, setInterview] = useState(null);
+    const [currentQ, setCurrentQ] = useState(0);
+    const [totalQ, setTotalQ] = useState(0);
+    const [question, setQuestion] = useState("");
+    const [category, setCategory] = useState("");
+    const [exchangeId, setExchangeId] = useState(null);
+    const [answer, setAnswer] = useState("");
+    const [aiResponse, setAiResponse] = useState("");
+    const [greeting, setGreeting] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [finished, setFinished] = useState(false);
+    const [evaluating, setEvaluating] = useState(false);
+    const [listening, setListening] = useState(false);
+    const [speaking, setSpeaking] = useState(false);
+    const [error, setError] = useState(null);
+    const recognitionRef = useRef(null);
+    const synthRef = useRef(window.speechSynthesis);
+
+    useEffect(() => {
+        loadInterview();
+    }, [interviewId]);
+
+    const loadInterview = async () => {
+        try {
+            const res = await apiFetch(`/ai-interview/${interviewId}`);
+            const data = await res.json();
+            setInterview(data);
+            setTotalQ(data.total_questions);
+
+            if (evaluateMode && data.status === "completed") {
+                handleEvaluate();
+                return;
+            }
+
+            if (data.status === "pending" || data.status === "in_progress") {
+                await startInterview();
+            } else if (data.status === "evaluated") {
+                onNavigate("ai_results", { interviewId });
+            } else {
+                setFinished(true);
+            }
+        } catch(e) { setError("Failed to load interview"); }
+        setLoading(false);
+    };
+
+    const startInterview = async () => {
+        try {
+            const res = await apiFetch(`/ai-interview/${interviewId}/start`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setCurrentQ(data.current_question);
+            setTotalQ(data.total_questions);
+            setQuestion(data.question);
+            setCategory(data.category);
+            setExchangeId(data.exchange_id);
+            setGreeting(data.greeting);
+            // Speak the greeting + question
+            speak(data.greeting + " " + data.question);
+        } catch(e) { setError(e.message); }
+        setLoading(false);
+    };
+
+    const speak = (text) => {
+        if (!synthRef.current) return;
+        synthRef.current.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.95;
+        utter.pitch = 1;
+        utter.lang = "en-US";
+        const voices = synthRef.current.getVoices();
+        const preferred = voices.find(v => v.name.includes("Google") || v.name.includes("Samantha") || v.name.includes("Daniel"));
+        if (preferred) utter.voice = preferred;
+        setSpeaking(true);
+        utter.onend = () => setSpeaking(false);
+        synthRef.current.speak(utter);
+    };
+
+    const startListening = () => {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            setError("Speech recognition not supported. Please type your answer.");
+            return;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        let finalTranscript = answer;
+        recognition.onresult = (e) => {
+            let interim = "";
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+                if (e.results[i].isFinal) {
+                    finalTranscript += e.results[i][0].transcript + " ";
+                } else {
+                    interim += e.results[i][0].transcript;
+                }
+            }
+            setAnswer(finalTranscript + interim);
+        };
+        recognition.onerror = () => setListening(false);
+        recognition.onend = () => setListening(false);
+        recognition.start();
+        recognitionRef.current = recognition;
+        setListening(true);
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+        setListening(false);
+    };
+
+    const handleSubmitAnswer = async () => {
+        if (!answer.trim()) return;
+        setSubmitting(true); setError(null);
+        stopListening();
+        synthRef.current?.cancel();
+
+        try {
+            const res = await apiFetch(`/ai-interview/${interviewId}/answer`, {
+                method: "POST",
+                body: JSON.stringify({ answer: answer.trim(), exchange_id: exchangeId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            setAiResponse(data.ai_response);
+
+            if (data.status === "completed") {
+                speak(data.ai_response);
+                setFinished(true);
+            } else {
+                // Speak AI response then next question
+                speak(data.ai_response + " ... " + data.question);
+                setCurrentQ(data.current_question);
+                setQuestion(data.question);
+                setCategory(data.category);
+                setExchangeId(data.exchange_id);
+                setAnswer("");
+            }
+        } catch(e) { setError(e.message); }
+        setSubmitting(false);
+    };
+
+    const handleEvaluate = async () => {
+        setEvaluating(true); setError(null);
+        try {
+            const res = await apiFetch(`/ai-interview/${interviewId}/evaluate`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            onNavigate("ai_results", { interviewId });
+        } catch(e) { setError(e.message); setEvaluating(false); }
+    };
+
+    const handleEndEarly = async () => {
+        try {
+            await apiFetch(`/ai-interview/${interviewId}/end`, { method: "POST" });
+            setFinished(true);
+        } catch(e) { setError(e.message); }
+    };
+
+    const categoryColors = { technical: "bg-blue-500/20 text-blue-300", behavioral: "bg-green-500/20 text-green-300", situational: "bg-amber-500/20 text-amber-300", project: "bg-purple-500/20 text-purple-300" };
+
+    if (loading) return <LoadingSpinner />;
+    if (evaluating) return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+                <svg className="animate-spin w-12 h-12 text-indigo-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <p className="text-white text-lg font-medium">AI is evaluating your answers...</p>
+                <p className="text-slate-400 text-sm mt-2">This may take a minute</p>
+            </div>
+        </div>
+    );
+
+    if (finished) return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="glass rounded-2xl p-8 text-center max-w-md">
+                <div className="w-16 h-16 rounded-full bg-emerald-600/20 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <h2 className="text-xl font-bold text-white mb-2">Interview Complete!</h2>
+                <p className="text-slate-400 text-sm mb-6">Your answers have been recorded. Get your AI evaluation now.</p>
+                <div className="flex gap-3 justify-center">
+                    <button onClick={handleEvaluate} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-all">
+                        Get AI Evaluation
+                    </button>
+                    <button onClick={() => onNavigate("ai_interview")} className="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-all">
+                        Back
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen flex flex-col">
+            {/* Top bar */}
+            <div className="glass-strong border-b border-slate-800/50 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${speaking ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`}/>
+                    <span className="text-white text-sm font-medium">AI Interviewer: Alex</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${categoryColors[category] || 'bg-slate-500/20 text-slate-300'}`}>{category}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    <span className="text-slate-400 text-sm">Question {currentQ + 1} / {totalQ}</span>
+                    <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full transition-all" style={{width: `${((currentQ + 1) / totalQ) * 100}%`}}/>
+                    </div>
+                    <button onClick={handleEndEarly} className="text-red-400 hover:text-red-300 text-xs">End Interview</button>
+                </div>
+            </div>
+
+            {/* Main area */}
+            <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4 py-8">
+                {error && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-2 rounded-xl text-sm mb-4">{error}</div>}
+
+                {/* AI Response */}
+                {(aiResponse || greeting) && (
+                    <div className="mb-6 flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-600/30 flex-shrink-0 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3"/></svg>
+                        </div>
+                        <div className="glass-strong rounded-2xl rounded-tl-sm px-4 py-3 max-w-lg">
+                            <p className="text-slate-300 text-sm">{aiResponse || greeting}</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Current Question */}
+                <div className="mb-6 flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600/30 flex-shrink-0 flex items-center justify-center">
+                        <span className="text-indigo-300 text-xs font-bold">Q</span>
+                    </div>
+                    <div className="glass rounded-2xl rounded-tl-sm px-5 py-4 max-w-lg glow">
+                        <p className="text-white text-sm leading-relaxed">{question}</p>
+                    </div>
+                </div>
+
+                {/* Answer Area */}
+                <div className="mt-auto">
+                    <div className="glass rounded-2xl p-4">
+                        <textarea
+                            value={answer}
+                            onChange={e => setAnswer(e.target.value)}
+                            placeholder={listening ? "Listening... speak your answer" : "Type your answer or click the mic to speak..."}
+                            className="w-full bg-transparent text-white text-sm placeholder-slate-600 resize-none focus:outline-none"
+                            rows={4}
+                        />
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-800/50">
+                            <div className="flex items-center gap-3">
+                                {/* Mic Button */}
+                                <button
+                                    onClick={listening ? stopListening : startListening}
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${listening ? 'bg-red-500 hover:bg-red-400 animate-pulse' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/>
+                                    </svg>
+                                </button>
+                                {listening && <span className="text-red-400 text-xs animate-pulse">Recording...</span>}
+                                {/* Speaker button to replay question */}
+                                <button onClick={() => speak(question)} className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all" title="Replay question">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <button
+                                onClick={handleSubmitAnswer}
+                                disabled={submitting || !answer.trim()}
+                                className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${submitting || !answer.trim() ? 'bg-slate-700 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
+                                {submitting ? (
+                                    <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Processing...</>
+                                ) : (
+                                    <>Submit Answer <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AIResultsScreen({ interviewId, onNavigate }) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        apiFetch(`/ai-interview/${interviewId}/results`)
+            .then(r => r.json())
+            .then(d => { setData(d); setLoading(false); })
+            .catch(() => setLoading(false));
+    }, [interviewId]);
+
+    if (loading) return <LoadingSpinner />;
+    if (!data) return <div className="text-center py-20 text-slate-400">No results found</div>;
+
+    const result = data.result;
+    const transcript = data.transcript || [];
+    const interview = data.interview || {};
+
+    const recColors = { strong_hire: "text-emerald-400 bg-emerald-400/10", hire: "text-green-400 bg-green-400/10", maybe: "text-amber-400 bg-amber-400/10", no_hire: "text-red-400 bg-red-400/10" };
+    const recLabels = { strong_hire: "Strong Hire", hire: "Hire", maybe: "Maybe", no_hire: "Not Recommended" };
+    const dimColors = { relevance: "bg-blue-500", depth: "bg-purple-500", communication: "bg-emerald-500", examples: "bg-amber-500" };
+
+    return (
+        <div className="max-w-4xl mx-auto px-4 py-6 fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-white">Interview Results</h1>
+                    <p className="text-slate-400 text-sm">{interview.interest_area} | {interview.job_role}</p>
+                </div>
+                <button onClick={() => onNavigate("ai_interview")} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-all">
+                    Back to Interviews
+                </button>
+            </div>
+
+            {result && (
+                <>
+                    {/* Overall Score Card */}
+                    <div className="glass rounded-2xl p-6 mb-6 glow">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <p className="text-slate-400 text-sm">Overall Score</p>
+                                <p className="text-4xl font-bold text-white">{result.overall_score}<span className="text-lg text-slate-500">/100</span></p>
+                            </div>
+                            <span className={`px-4 py-2 rounded-xl text-sm font-bold ${recColors[result.recommendation] || 'text-slate-400 bg-slate-400/10'}`}>
+                                {recLabels[result.recommendation] || result.recommendation}
+                            </span>
+                        </div>
+
+                        {/* Category Scores */}
+                        {result.category_scores && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                {Object.entries(result.category_scores).map(([cat, score]) => (
+                                    <div key={cat} className="glass-strong rounded-xl p-3 text-center">
+                                        <p className="text-slate-500 text-xs capitalize">{cat}</p>
+                                        <p className="text-white text-lg font-bold">{score}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Summary */}
+                        {result.summary && <p className="text-slate-300 text-sm leading-relaxed">{result.summary}</p>}
+                    </div>
+
+                    {/* Strengths & Improvements */}
+                    <div className="grid md:grid-cols-2 gap-4 mb-6">
+                        <div className="glass rounded-2xl p-5">
+                            <h3 className="text-emerald-400 text-sm font-semibold mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                                Strengths
+                            </h3>
+                            <ul className="space-y-2">
+                                {(result.top_strengths || []).map((s, i) => (
+                                    <li key={i} className="text-slate-300 text-sm flex items-start gap-2">
+                                        <span className="text-emerald-500 mt-1">+</span> {s}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="glass rounded-2xl p-5">
+                            <h3 className="text-amber-400 text-sm font-semibold mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                                Areas to Improve
+                            </h3>
+                            <ul className="space-y-2">
+                                {(result.improvement_areas || []).map((s, i) => (
+                                    <li key={i} className="text-slate-300 text-sm flex items-start gap-2">
+                                        <span className="text-amber-500 mt-1">!</span> {s}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Transcript with Evaluations */}
+            <div className="glass rounded-2xl p-6">
+                <h3 className="text-white text-lg font-semibold mb-4">Interview Transcript</h3>
+                <div className="space-y-6">
+                    {transcript.map((ex, i) => (
+                        <div key={i} className="glass-strong rounded-xl p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-indigo-400 text-xs font-bold">Q{ex.sequence + 1}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs ${ex.category === 'technical' ? 'bg-blue-500/20 text-blue-300' : ex.category === 'behavioral' ? 'bg-green-500/20 text-green-300' : ex.category === 'situational' ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'}`}>
+                                    {ex.category}
+                                </span>
+                            </div>
+                            <p className="text-white text-sm font-medium mb-2">{ex.question}</p>
+                            <p className="text-slate-400 text-sm mb-3">{ex.answer || <span className="italic text-slate-600">No answer</span>}</p>
+
+                            {ex.evaluation && (
+                                <div className="border-t border-slate-700/50 pt-3 mt-3">
+                                    <div className="flex gap-3 mb-2">
+                                        {["relevance", "depth", "communication", "examples"].map(dim => (
+                                            <div key={dim} className="flex items-center gap-1.5">
+                                                <div className={`w-2 h-2 rounded-full ${dimColors[dim]}`}/>
+                                                <span className="text-slate-500 text-xs capitalize">{dim}</span>
+                                                <span className="text-white text-xs font-bold">{ex.evaluation[dim + "_score"]}/10</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {ex.evaluation.strengths && ex.evaluation.strengths.length > 0 && (
+                                        <p className="text-emerald-400/70 text-xs mt-1">+ {(Array.isArray(ex.evaluation.strengths) ? ex.evaluation.strengths : [ex.evaluation.strengths]).join(", ")}</p>
+                                    )}
+                                    {ex.evaluation.suggestions && ex.evaluation.suggestions.length > 0 && (
+                                        <p className="text-amber-400/70 text-xs mt-1">Tip: {(Array.isArray(ex.evaluation.suggestions) ? ex.evaluation.suggestions : [ex.evaluation.suggestions]).join(", ")}</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function App() {
     const [authState, setAuthState] = useState("checking"); // checking, login, register, change_password, authenticated
     const [screen, setScreen] = useState("dashboard");
@@ -1915,6 +2719,20 @@ function App() {
         } catch { setError("Cannot connect to backend."); }
     };
 
+    const handleStartJDInterview = async (name, jobDescription, selectedEngine) => {
+        setError(null); setEngine(selectedEngine);
+        try {
+            const res = await fetch(`${API}/session/start-jd`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ candidate_name: name, job_description: jobDescription }) });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error || "Failed to generate questions"); return; }
+            setSessionId(data.session_id);
+            const qRes = await fetch(`${API}/questions?session_id=${data.session_id}`, { headers: authHeaders() });
+            const qData = await qRes.json();
+            setQuestions(qData);
+            setScreen("interview_room");
+        } catch { setError("Cannot connect to backend. Make sure an LLM API key is configured."); }
+    };
+
     const handleFinishInterview = async (timeTaken, recordedAudioUrls) => {
         setAudioUrls(recordedAudioUrls || {});
         try {
@@ -1931,7 +2749,7 @@ function App() {
     if (authState === "change_password") return <ChangePasswordScreen onComplete={handlePasswordChanged} />;
 
     // Authenticated app
-    const showNav = !["interview_room", "results"].includes(screen);
+    const showNav = !["interview_room", "results", "ai_interview_room"].includes(screen);
 
     return (
         <div className="relative min-h-screen">
@@ -1948,9 +2766,12 @@ function App() {
             {screen === "learning" && <LearningScreen initialTopicId={screenParams.topicId} onNavigate={navigate} />}
             {screen === "assessment" && <TopicAssessmentScreen topicId={screenParams.topicId} topicTitle={screenParams.topicTitle} onComplete={() => navigate("learning")} onNavigate={navigate} />}
             {screen === "review" && <ReviewScreen onNavigate={navigate} />}
-            {screen === "interview" && <HomeScreen onStart={handleStartInterview} user={user} />}
+            {screen === "interview" && <HomeScreen onStart={handleStartInterview} onStartJD={handleStartJDInterview} user={user} />}
             {screen === "interview_room" && <InterviewRoom sessionId={sessionId} questions={questions} engine={engine} onFinish={handleFinishInterview} />}
             {screen === "results" && <ResultsPage scorecard={scorecard} questionReview={questionReview} audioUrls={audioUrls} onRestart={() => navigate("dashboard")} sessionId={sessionId} />}
+            {screen === "ai_interview" && <AIInterviewHub onNavigate={navigate} />}
+            {screen === "ai_interview_room" && <AIInterviewRoom interviewId={screenParams.interviewId} evaluateMode={screenParams.evaluate} onNavigate={navigate} />}
+            {screen === "ai_results" && <AIResultsScreen interviewId={screenParams.interviewId} onNavigate={navigate} />}
         </div>
     );
 }

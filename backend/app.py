@@ -13,6 +13,8 @@ from topic_questions import get_topic_questions
 import storage
 import learning_engine
 import scheduler
+from resume_parser import extract_text, validate_resume_file
+import llm_service
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -25,7 +27,9 @@ JWT_EXPIRY = 86400  # 24 hours
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CONTENT_DIR = os.path.join(DATA_DIR, "content")
 RECORDINGS_DIR = os.path.join(DATA_DIR, "recordings")
+UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
 # ─── Auth Helpers ───
@@ -209,6 +213,61 @@ def detect_interview_role():
         "role_name": role_data["name"],
         "interests": interests,
         "total_questions": 30,
+    })
+
+
+# ─── JD-Based Interview ───
+
+@app.route("/api/session/start-jd", methods=["POST"])
+@auth_optional
+def start_session_jd():
+    """Start an interview session with LLM-generated questions from a job description."""
+    data = request.json
+    name = data.get("candidate_name", "").strip()
+    job_description = data.get("job_description", "").strip()
+
+    if not name or not job_description:
+        return jsonify({"error": "Name and job description are required"}), 400
+
+    if len(job_description) < 50:
+        return jsonify({"error": "Please provide a more detailed job description (at least 50 characters)"}), 400
+
+    try:
+        questions, provider = llm_service.generate_questions_from_jd(job_description, num_questions=15)
+
+        # Ensure proper format
+        for i, q in enumerate(questions):
+            q["id"] = i + 1
+            if "keywords" not in q:
+                q["keywords"] = []
+            if "model_answer" not in q:
+                q["model_answer"] = "No model answer available."
+            if "topic" not in q:
+                q["topic"] = "General"
+            if "difficulty" not in q:
+                q["difficulty"] = "Medium"
+
+    except Exception as e:
+        print(f"[JD Interview] LLM error: {e}")
+        return jsonify({"error": f"Failed to generate questions: {str(e)}"}), 500
+
+    # Extract a short job title from the JD (first line or first 50 chars)
+    job_title = job_description.split("\n")[0][:60].strip()
+    if not job_title:
+        job_title = "JD-Based Interview"
+
+    user_id = g.user_id or "anonymous"
+    session = storage.create_session(user_id, job_title, questions, "JD-Based")
+
+    print(f"[JD Session] {name} | {len(questions)} Qs via {provider} | User: {user_id}")
+
+    return jsonify({
+        "session_id": session["session_id"],
+        "candidate_name": name,
+        "job_title": job_title,
+        "role_name": "JD-Based",
+        "total_questions": len(questions),
+        "llm_provider": provider,
     })
 
 
@@ -857,6 +916,503 @@ def list_recordings(session_id):
     return jsonify(recordings)
 
 
+# ═══════════════════════════════════════════════════
+# Phase 2: AI Voice Interview Engine
+# ═══════════════════════════════════════════════════
+
+
+# ─── Resume Upload & Parsing ───
+
+@app.route("/api/resume/upload", methods=["POST"])
+@auth_required
+def upload_resume():
+    """Upload and parse a resume (PDF/DOCX/TXT)."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    # Validate file
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    valid, error = validate_resume_file(file.filename, file_size)
+    if not valid:
+        return jsonify({"error": error}), 400
+
+    # Save file temporarily
+    import uuid
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = os.path.join(UPLOADS_DIR, safe_name)
+    file.save(file_path)
+
+    try:
+        # Extract text
+        raw_text = extract_text(file_path)
+        if not raw_text or len(raw_text) < 50:
+            return jsonify({"error": "Could not extract enough text from resume. Try a different format."}), 400
+
+        # Parse with LLM
+        user = storage.get_user(g.user_id)
+        interest = user.get("interest_areas", ["General"])[0] if user else "General"
+
+        try:
+            parsed_data, provider = llm_service.analyze_resume(raw_text, interest)
+        except Exception as e:
+            # Save with raw text only if LLM fails
+            parsed_data = {"skills": [], "experience_years": 0, "experience_level": "mid",
+                          "projects": [], "education": [], "strengths": [], "gaps_for_role": [],
+                          "summary": "Resume uploaded but AI parsing unavailable.", "parse_error": str(e)}
+            provider = "none"
+
+        # Delete old resumes (single resume per user)
+        old_resumes = storage.get_user_resumes(g.user_id)
+        for old in old_resumes:
+            storage.delete_resume(old["id"])
+
+        # Save to DB
+        resume = storage.save_resume(g.user_id, file.filename, raw_text, parsed_data)
+        resume["llm_provider"] = provider
+
+        return jsonify(resume), 201
+
+    finally:
+        # Clean up temp file
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
+@app.route("/api/resume/<resume_id>", methods=["GET"])
+@auth_required
+def get_resume(resume_id):
+    """Get a parsed resume."""
+    resume = storage.get_resume(resume_id)
+    if not resume:
+        return jsonify({"error": "Resume not found"}), 404
+    if resume["user_id"] != g.user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(resume)
+
+
+@app.route("/api/resume/<resume_id>", methods=["DELETE"])
+@auth_required
+def delete_resume(resume_id):
+    """Delete a resume."""
+    resume = storage.get_resume(resume_id)
+    if not resume:
+        return jsonify({"error": "Resume not found"}), 404
+    if resume["user_id"] != g.user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    storage.delete_resume(resume_id)
+    return jsonify({"message": "Resume deleted"})
+
+
+@app.route("/api/resume/list", methods=["GET"])
+@auth_required
+def list_resumes():
+    """Get all resumes for the current user."""
+    resumes = storage.get_user_resumes(g.user_id)
+    return jsonify(resumes)
+
+
+# ─── AI Interview: Create & Question Generation ───
+
+@app.route("/api/ai-interview/create", methods=["POST"])
+@auth_required
+def create_ai_interview():
+    """Create AI interview: parses resume + generates role-specific questions."""
+    data = request.get_json()
+    resume_id = data.get("resume_id")
+    job_role = data.get("job_role", "")
+    interest_area = data.get("interest_area", "")
+
+    if not resume_id:
+        return jsonify({"error": "resume_id is required"}), 400
+
+    resume = storage.get_resume(resume_id)
+    if not resume:
+        return jsonify({"error": "Resume not found"}), 404
+
+    # Use user's interest areas if not specified
+    if not interest_area:
+        user = storage.get_user(g.user_id)
+        interest_area = user.get("interest_areas", ["General"])[0] if user else "General"
+
+    if not job_role:
+        job_role = f"{interest_area} Engineer"
+
+    # Generate questions using LLM
+    try:
+        questions, provider = llm_service.generate_interview_questions(
+            resume["parsed_data"], job_role, interest_area, num_questions=15)
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate questions: {str(e)}"}), 500
+
+    # Create interview session
+    interview = storage.create_ai_interview(
+        g.user_id, resume_id, job_role, interest_area, questions, provider)
+
+    return jsonify(interview), 201
+
+
+@app.route("/api/ai-interview/<interview_id>", methods=["GET"])
+@auth_required
+def get_ai_interview(interview_id):
+    """Get AI interview details."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+    if interview["user_id"] != g.user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(interview)
+
+
+@app.route("/api/ai-interview/list", methods=["GET"])
+@auth_required
+def list_ai_interviews():
+    """List all AI interviews for current user."""
+    interviews = storage.get_user_ai_interviews(g.user_id)
+    return jsonify(interviews)
+
+
+# ─── AI Interview: Conduct Interview ───
+
+@app.route("/api/ai-interview/<interview_id>/start", methods=["POST"])
+@auth_required
+def start_ai_interview(interview_id):
+    """Start the interview — returns the first question."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+    if interview["user_id"] != g.user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    if interview["status"] not in ("pending", "in_progress"):
+        return jsonify({"error": "Interview already completed"}), 400
+
+    storage.update_ai_interview_status(interview_id, "in_progress")
+
+    questions = interview["questions"]
+    if not questions:
+        return jsonify({"error": "No questions available"}), 500
+
+    first_q = questions[0]
+
+    # Save the first exchange (question only, no answer yet)
+    exchange = storage.save_exchange(
+        interview_id, 0, first_q["question"], first_q.get("category", "technical"),
+        first_q.get("difficulty", "medium"),
+        first_q.get("expected_topics", []), first_q.get("ideal_answer_points", []))
+
+    return jsonify({
+        "interview_id": interview_id,
+        "status": "in_progress",
+        "current_question": 0,
+        "total_questions": len(questions),
+        "question": first_q["question"],
+        "category": first_q.get("category", "technical"),
+        "exchange_id": exchange["id"],
+        "greeting": f"Hello! I'm Alex, and I'll be conducting your {interview['interest_area']} interview today. Let's get started with the first question.",
+    })
+
+
+@app.route("/api/ai-interview/<interview_id>/answer", methods=["POST"])
+@auth_required
+def submit_ai_answer(interview_id):
+    """Submit answer for current question, get next question or finish."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+    if interview["status"] != "in_progress":
+        return jsonify({"error": "Interview not in progress"}), 400
+
+    data = request.get_json()
+    answer_text = data.get("answer", "")
+    exchange_id = data.get("exchange_id")
+    answer_duration = data.get("duration_sec", 0)
+
+    if not answer_text:
+        return jsonify({"error": "Answer is required"}), 400
+
+    # Get current exchanges to determine position
+    exchanges = storage.get_interview_exchanges(interview_id)
+    current_idx = len(exchanges) - 1
+    questions = interview["questions"]
+
+    # Generate AI acknowledgment
+    try:
+        conversation_history = []
+        for ex in exchanges:
+            conversation_history.append({"role": "assistant", "content": ex["question_text"]})
+            if ex.get("answer_text"):
+                conversation_history.append({"role": "user", "content": ex["answer_text"]})
+
+        context = {
+            "job_role": interview["job_role"],
+            "interest_area": interview["interest_area"],
+            "conversation_history": conversation_history,
+        }
+        ai_response, _ = llm_service.generate_conversational_response(
+            context, answer_text, current_idx, len(questions))
+    except Exception:
+        ai_response = "Thank you for that answer. Let's move on."
+
+    # Update exchange with answer
+    if exchange_id:
+        storage.update_exchange_answer(exchange_id, answer_text, answer_duration,
+                                       ai_acknowledgment=ai_response)
+
+    # Check if there are more questions
+    next_idx = current_idx + 1
+    if next_idx < len(questions):
+        next_q = questions[next_idx]
+        # Save next exchange
+        next_exchange = storage.save_exchange(
+            interview_id, next_idx, next_q["question"], next_q.get("category", "technical"),
+            next_q.get("difficulty", "medium"),
+            next_q.get("expected_topics", []), next_q.get("ideal_answer_points", []))
+
+        return jsonify({
+            "status": "in_progress",
+            "current_question": next_idx,
+            "total_questions": len(questions),
+            "ai_response": ai_response,
+            "question": next_q["question"],
+            "category": next_q.get("category", "technical"),
+            "exchange_id": next_exchange["id"],
+        })
+    else:
+        # Interview complete
+        storage.update_ai_interview_status(interview_id, "completed")
+        return jsonify({
+            "status": "completed",
+            "ai_response": ai_response + " That concludes our interview. Thank you for your time! Your results will be available shortly.",
+            "total_questions": len(questions),
+            "message": "Interview completed! You can now request evaluation.",
+        })
+
+
+@app.route("/api/ai-interview/<interview_id>/end", methods=["POST"])
+@auth_required
+def end_ai_interview(interview_id):
+    """End interview early."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+    if interview["status"] != "in_progress":
+        return jsonify({"error": "Interview not in progress"}), 400
+
+    storage.update_ai_interview_status(interview_id, "completed")
+    return jsonify({"status": "completed", "message": "Interview ended."})
+
+
+# ─── AI Interview: Evaluation ───
+
+@app.route("/api/ai-interview/<interview_id>/evaluate", methods=["POST"])
+@auth_required
+def evaluate_ai_interview(interview_id):
+    """Evaluate all answers in the interview using LLM."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+    if interview["status"] not in ("completed", "evaluated"):
+        return jsonify({"error": "Interview must be completed first"}), 400
+
+    resume = storage.get_resume(interview["resume_id"])
+    resume_summary = resume["parsed_data"].get("summary", "") if resume else ""
+
+    exchanges = storage.get_interview_exchanges(interview_id)
+    evaluated_exchanges = []
+
+    for ex in exchanges:
+        if not ex.get("answer_text"):
+            continue
+        try:
+            scores, _ = llm_service.evaluate_answer(
+                ex["question_text"], ex["answer_text"], ex.get("question_category", "technical"),
+                ex.get("expected_topics", []), ex.get("ideal_answer_points", []),
+                resume_summary)
+            storage.save_evaluation(interview_id, ex["id"], scores)
+            evaluated_exchanges.append({
+                "question": ex["question_text"],
+                "category": ex.get("question_category"),
+                "answer": ex["answer_text"],
+                "scores": scores,
+            })
+        except Exception as e:
+            evaluated_exchanges.append({
+                "question": ex["question_text"],
+                "error": str(e),
+            })
+
+    # Generate overall summary
+    try:
+        summary_data = {
+            "job_role": interview["job_role"],
+            "interest_area": interview["interest_area"],
+            "experience_level": resume["parsed_data"].get("experience_level", "mid") if resume else "mid",
+            "exchanges": evaluated_exchanges,
+        }
+        result, _ = llm_service.generate_interview_summary(summary_data)
+        storage.save_interview_result(interview_id, result)
+        storage.update_ai_interview_status(interview_id, "evaluated")
+    except Exception as e:
+        result = {"error": str(e), "overall_score": 0}
+
+    return jsonify({
+        "interview_id": interview_id,
+        "status": "evaluated",
+        "per_answer": evaluated_exchanges,
+        "overall": result,
+    })
+
+
+@app.route("/api/ai-interview/<interview_id>/results", methods=["GET"])
+@auth_required
+def get_ai_interview_results(interview_id):
+    """Get full interview results with evaluations."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+
+    exchanges = storage.get_interview_exchanges(interview_id)
+    evaluations = storage.get_interview_evaluations(interview_id)
+    result = storage.get_interview_result(interview_id)
+
+    # Map evaluations to exchanges
+    eval_map = {e["exchange_id"]: e for e in evaluations}
+    transcript = []
+    for ex in exchanges:
+        transcript.append({
+            "sequence": ex["sequence_num"],
+            "question": ex["question_text"],
+            "category": ex.get("question_category"),
+            "answer": ex.get("answer_text", ""),
+            "ai_response": ex.get("ai_acknowledgment", ""),
+            "evaluation": eval_map.get(ex["id"]),
+        })
+
+    return jsonify({
+        "interview": interview,
+        "transcript": transcript,
+        "result": result,
+    })
+
+
+@app.route("/api/ai-interview/<interview_id>/transcript", methods=["GET"])
+@auth_required
+def get_transcript(interview_id):
+    """Get interview transcript."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+
+    exchanges = storage.get_interview_exchanges(interview_id)
+    transcript = []
+    for ex in exchanges:
+        transcript.append({
+            "sequence": ex["sequence_num"],
+            "question": ex["question_text"],
+            "answer": ex.get("answer_text", ""),
+            "ai_response": ex.get("ai_acknowledgment", ""),
+            "timestamp": ex.get("timestamp"),
+        })
+
+    return jsonify({
+        "interview_id": interview_id,
+        "job_role": interview["job_role"],
+        "interest_area": interview["interest_area"],
+        "transcript": transcript,
+    })
+
+
+# ─── HR Dashboard ───
+
+@app.route("/api/hr/register", methods=["POST"])
+def hr_register():
+    """Register HR user."""
+    data = request.get_json()
+    email = data.get("email", "")
+    password = data.get("password", "")
+    full_name = data.get("full_name", "")
+    company = data.get("company", "")
+
+    if not all([email, password, full_name]):
+        return jsonify({"error": "email, password, and full_name are required"}), 400
+
+    hr, error = storage.register_hr_user(email, password, full_name, company)
+    if error:
+        return jsonify({"error": error}), 409
+    return jsonify(hr), 201
+
+
+@app.route("/api/hr/login", methods=["POST"])
+def hr_login():
+    """HR user login."""
+    data = request.get_json()
+    hr, error = storage.login_hr_user(data.get("email", ""), data.get("password", ""))
+    if error:
+        return jsonify({"error": error}), 401
+    token = create_token(hr["id"], hr["email"])
+    return jsonify({"token": token, "user": hr})
+
+
+@app.route("/api/hr/candidates", methods=["GET"])
+@auth_required
+def hr_get_candidates():
+    """Get all candidates with interview results."""
+    candidates = storage.get_all_candidates_with_results()
+    return jsonify(candidates)
+
+
+@app.route("/api/hr/interview/<interview_id>/results", methods=["GET"])
+@auth_required
+def hr_get_interview_results(interview_id):
+    """Get specific interview results (HR view)."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return jsonify({"error": "Interview not found"}), 404
+
+    exchanges = storage.get_interview_exchanges(interview_id)
+    evaluations = storage.get_interview_evaluations(interview_id)
+    result = storage.get_interview_result(interview_id)
+    resume = storage.get_resume(interview.get("resume_id", ""))
+
+    eval_map = {e["exchange_id"]: e for e in evaluations}
+    transcript = []
+    for ex in exchanges:
+        transcript.append({
+            "sequence": ex["sequence_num"],
+            "question": ex["question_text"],
+            "category": ex.get("question_category"),
+            "answer": ex.get("answer_text", ""),
+            "evaluation": eval_map.get(ex["id"]),
+        })
+
+    return jsonify({
+        "interview": interview,
+        "resume": resume,
+        "transcript": transcript,
+        "result": result,
+    })
+
+
+# ─── LLM Config ───
+
+@app.route("/api/config/llm-status", methods=["GET"])
+def llm_status():
+    """Check which LLM providers are configured."""
+    providers = llm_service._get_available_providers()
+    return jsonify({
+        "available_providers": providers,
+        "claude": "claude" in providers,
+        "openai": "openai" in providers,
+        "gemini": "gemini" in providers,
+        "any_available": len(providers) > 0,
+    })
+
+
 @app.route("/")
 def serve_frontend():
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -865,7 +1421,7 @@ def serve_frontend():
 if __name__ == "__main__":
     print("=" * 50)
     print("  GrowthPath - Backend + Frontend")
-    print("  Auth: JWT | Storage: JSON files (data/)")
+    print("  Auth: JWT | Storage: PostgreSQL/SQLite")
     print("  Open http://localhost:5000 in your browser")
     print("=" * 50)
     app.run(debug=True, port=5000)

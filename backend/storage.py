@@ -215,6 +215,79 @@ def init_db():
                     dimension TEXT,
                     marked_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS resumes (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    filename TEXT,
+                    raw_text TEXT,
+                    parsed_data TEXT,
+                    uploaded_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS ai_interviews (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    resume_id TEXT,
+                    job_role TEXT,
+                    interest_area TEXT,
+                    status TEXT DEFAULT 'pending',
+                    questions TEXT DEFAULT '[]',
+                    target_duration_min INTEGER DEFAULT 30,
+                    actual_duration_min REAL,
+                    total_questions INTEGER DEFAULT 0,
+                    llm_model TEXT,
+                    created_at TEXT,
+                    started_at TEXT,
+                    completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS interview_exchanges (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    sequence_num INTEGER,
+                    question_text TEXT,
+                    question_category TEXT,
+                    question_difficulty TEXT,
+                    expected_topics TEXT,
+                    ideal_answer_points TEXT,
+                    answer_text TEXT,
+                    answer_audio_url TEXT,
+                    answer_duration_sec REAL,
+                    ai_acknowledgment TEXT,
+                    timestamp TEXT
+                );
+                CREATE TABLE IF NOT EXISTS evaluations (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    exchange_id TEXT,
+                    relevance_score REAL,
+                    depth_score REAL,
+                    communication_score REAL,
+                    examples_score REAL,
+                    total_score REAL,
+                    strengths TEXT,
+                    weaknesses TEXT,
+                    suggestions TEXT,
+                    ideal_answer TEXT
+                );
+                CREATE TABLE IF NOT EXISTS interview_results (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    overall_score REAL,
+                    category_scores TEXT,
+                    top_strengths TEXT,
+                    improvement_areas TEXT,
+                    recommendation TEXT,
+                    summary TEXT,
+                    evaluated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS hr_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    full_name TEXT,
+                    company TEXT,
+                    role TEXT DEFAULT 'hr',
+                    created_at TEXT
+                );
             """)
         else:
             conn.executescript("""
@@ -313,6 +386,79 @@ def init_db():
                     topic_id TEXT,
                     dimension TEXT,
                     marked_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS resumes (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    filename TEXT,
+                    raw_text TEXT,
+                    parsed_data TEXT,
+                    uploaded_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS ai_interviews (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    resume_id TEXT,
+                    job_role TEXT,
+                    interest_area TEXT,
+                    status TEXT DEFAULT 'pending',
+                    questions TEXT DEFAULT '[]',
+                    target_duration_min INTEGER DEFAULT 30,
+                    actual_duration_min REAL,
+                    total_questions INTEGER DEFAULT 0,
+                    llm_model TEXT,
+                    created_at TEXT,
+                    started_at TEXT,
+                    completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS interview_exchanges (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    sequence_num INTEGER,
+                    question_text TEXT,
+                    question_category TEXT,
+                    question_difficulty TEXT,
+                    expected_topics TEXT,
+                    ideal_answer_points TEXT,
+                    answer_text TEXT,
+                    answer_audio_url TEXT,
+                    answer_duration_sec REAL,
+                    ai_acknowledgment TEXT,
+                    timestamp TEXT
+                );
+                CREATE TABLE IF NOT EXISTS evaluations (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    exchange_id TEXT,
+                    relevance_score REAL,
+                    depth_score REAL,
+                    communication_score REAL,
+                    examples_score REAL,
+                    total_score REAL,
+                    strengths TEXT,
+                    weaknesses TEXT,
+                    suggestions TEXT,
+                    ideal_answer TEXT
+                );
+                CREATE TABLE IF NOT EXISTS interview_results (
+                    id TEXT PRIMARY KEY,
+                    interview_id TEXT,
+                    overall_score REAL,
+                    category_scores TEXT,
+                    top_strengths TEXT,
+                    improvement_areas TEXT,
+                    recommendation TEXT,
+                    summary TEXT,
+                    evaluated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS hr_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    full_name TEXT,
+                    company TEXT,
+                    role TEXT DEFAULT 'hr',
+                    created_at TEXT
                 );
             """)
 
@@ -1059,3 +1205,298 @@ def get_enhanced_dashboard_data(user_id):
     base_data["overall_proficiency"] = overall_proficiency
 
     return base_data
+
+
+# ─── Phase 2: Resume Storage ───
+
+def save_resume(user_id, filename, raw_text, parsed_data):
+    """Save uploaded resume."""
+    resume_id = _gen_id()
+    now = datetime.now().isoformat()
+
+    with _get_db() as conn:
+        _execute(conn,
+            """INSERT INTO resumes (id, user_id, filename, raw_text, parsed_data, uploaded_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (resume_id, user_id, filename, raw_text, _json_field(parsed_data), now))
+
+    return {
+        "id": resume_id, "user_id": user_id, "filename": filename,
+        "parsed_data": parsed_data, "uploaded_at": now,
+    }
+
+
+def get_resume(resume_id):
+    """Get resume by ID."""
+    with _get_db() as conn:
+        row = _fetchone(conn, "SELECT * FROM resumes WHERE id = ?", (resume_id,))
+        if not row:
+            return None
+        r = dict(row)
+        r["parsed_data"] = _parse_json_field(r["parsed_data"])
+        return r
+
+
+def get_user_resumes(user_id):
+    """Get all resumes for a user."""
+    with _get_db() as conn:
+        rows = _fetchall(conn, "SELECT * FROM resumes WHERE user_id = ? ORDER BY uploaded_at DESC", (user_id,))
+        for r in rows:
+            r["parsed_data"] = _parse_json_field(r["parsed_data"])
+        return rows
+
+
+def delete_resume(resume_id):
+    """Delete a resume."""
+    with _get_db() as conn:
+        _execute(conn, "DELETE FROM resumes WHERE id = ?", (resume_id,))
+
+
+# ─── Phase 2: AI Interview Storage ───
+
+def create_ai_interview(user_id, resume_id, job_role, interest_area, questions, llm_model):
+    """Create a new AI interview session."""
+    interview_id = _gen_id()
+    now = datetime.now().isoformat()
+
+    with _get_db() as conn:
+        _execute(conn,
+            """INSERT INTO ai_interviews (id, user_id, resume_id, job_role, interest_area,
+               status, questions, total_questions, llm_model, created_at)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
+            (interview_id, user_id, resume_id, job_role, interest_area,
+             _json_field(questions), len(questions), llm_model, now))
+
+    return {
+        "id": interview_id, "user_id": user_id, "resume_id": resume_id,
+        "job_role": job_role, "interest_area": interest_area,
+        "status": "pending", "questions": questions,
+        "total_questions": len(questions), "llm_model": llm_model,
+        "created_at": now,
+    }
+
+
+def get_ai_interview(interview_id):
+    """Get AI interview by ID."""
+    with _get_db() as conn:
+        row = _fetchone(conn, "SELECT * FROM ai_interviews WHERE id = ?", (interview_id,))
+        if not row:
+            return None
+        r = dict(row)
+        r["questions"] = _parse_json_field(r["questions"])
+        return r
+
+
+def get_user_ai_interviews(user_id):
+    """Get all AI interviews for a user."""
+    with _get_db() as conn:
+        rows = _fetchall(conn,
+            "SELECT * FROM ai_interviews WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        for r in rows:
+            r["questions"] = _parse_json_field(r["questions"])
+        return rows
+
+
+def update_ai_interview_status(interview_id, status, **kwargs):
+    """Update AI interview status and optional fields."""
+    now = datetime.now().isoformat()
+    with _get_db() as conn:
+        if status == "in_progress":
+            _execute(conn, "UPDATE ai_interviews SET status=?, started_at=? WHERE id=?",
+                     (status, now, interview_id))
+        elif status == "completed":
+            duration = kwargs.get("duration", 0)
+            _execute(conn, "UPDATE ai_interviews SET status=?, completed_at=?, actual_duration_min=? WHERE id=?",
+                     (status, now, duration, interview_id))
+        elif status == "evaluated":
+            _execute(conn, "UPDATE ai_interviews SET status=? WHERE id=?",
+                     (status, interview_id))
+        else:
+            _execute(conn, "UPDATE ai_interviews SET status=? WHERE id=?",
+                     (status, interview_id))
+
+
+# ─── Phase 2: Interview Exchange Storage ───
+
+def save_exchange(interview_id, sequence_num, question_text, question_category,
+                  question_difficulty, expected_topics, ideal_answer_points,
+                  answer_text=None, answer_audio_url=None, answer_duration_sec=None,
+                  ai_acknowledgment=None):
+    """Save an interview Q&A exchange."""
+    exchange_id = _gen_id()
+    now = datetime.now().isoformat()
+
+    with _get_db() as conn:
+        _execute(conn,
+            """INSERT INTO interview_exchanges (id, interview_id, sequence_num, question_text,
+               question_category, question_difficulty, expected_topics, ideal_answer_points,
+               answer_text, answer_audio_url, answer_duration_sec, ai_acknowledgment, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (exchange_id, interview_id, sequence_num, question_text, question_category,
+             question_difficulty, _json_field(expected_topics), _json_field(ideal_answer_points),
+             answer_text, answer_audio_url, answer_duration_sec, ai_acknowledgment, now))
+
+    return {
+        "id": exchange_id, "interview_id": interview_id, "sequence_num": sequence_num,
+        "question_text": question_text, "question_category": question_category,
+        "answer_text": answer_text, "timestamp": now,
+    }
+
+
+def update_exchange_answer(exchange_id, answer_text, answer_duration_sec=None,
+                           answer_audio_url=None, ai_acknowledgment=None):
+    """Update exchange with candidate's answer."""
+    with _get_db() as conn:
+        _execute(conn,
+            """UPDATE interview_exchanges SET answer_text=?, answer_duration_sec=?,
+               answer_audio_url=?, ai_acknowledgment=? WHERE id=?""",
+            (answer_text, answer_duration_sec, answer_audio_url, ai_acknowledgment, exchange_id))
+
+
+def get_interview_exchanges(interview_id):
+    """Get all exchanges for an interview."""
+    with _get_db() as conn:
+        rows = _fetchall(conn,
+            "SELECT * FROM interview_exchanges WHERE interview_id = ? ORDER BY sequence_num",
+            (interview_id,))
+        for r in rows:
+            r["expected_topics"] = _parse_json_field(r["expected_topics"])
+            r["ideal_answer_points"] = _parse_json_field(r["ideal_answer_points"])
+        return rows
+
+
+# ─── Phase 2: Evaluation Storage ───
+
+def save_evaluation(interview_id, exchange_id, scores):
+    """Save evaluation for a single exchange."""
+    eval_id = _gen_id()
+    with _get_db() as conn:
+        _execute(conn,
+            """INSERT INTO evaluations (id, interview_id, exchange_id, relevance_score,
+               depth_score, communication_score, examples_score, total_score,
+               strengths, weaknesses, suggestions, ideal_answer)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (eval_id, interview_id, exchange_id,
+             scores.get("relevance", 0), scores.get("depth", 0),
+             scores.get("communication", 0), scores.get("examples", 0),
+             scores.get("total_score", 0),
+             _json_field(scores.get("strengths", [])),
+             _json_field(scores.get("weaknesses", [])),
+             _json_field(scores.get("suggestions", [])),
+             scores.get("ideal_answer", "")))
+    return eval_id
+
+
+def get_interview_evaluations(interview_id):
+    """Get all evaluations for an interview."""
+    with _get_db() as conn:
+        rows = _fetchall(conn,
+            "SELECT * FROM evaluations WHERE interview_id = ? ORDER BY exchange_id", (interview_id,))
+        for r in rows:
+            r["strengths"] = _parse_json_field(r["strengths"])
+            r["weaknesses"] = _parse_json_field(r["weaknesses"])
+            r["suggestions"] = _parse_json_field(r["suggestions"])
+        return rows
+
+
+def save_interview_result(interview_id, result):
+    """Save overall interview result."""
+    result_id = _gen_id()
+    now = datetime.now().isoformat()
+    with _get_db() as conn:
+        if USE_PG:
+            _execute(conn,
+                """INSERT INTO interview_results (id, interview_id, overall_score, category_scores,
+                   top_strengths, improvement_areas, recommendation, summary, evaluated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (id) DO UPDATE SET overall_score=EXCLUDED.overall_score""",
+                (result_id, interview_id, result.get("overall_score", 0),
+                 _json_field(result.get("category_scores", {})),
+                 _json_field(result.get("top_strengths", [])),
+                 _json_field(result.get("improvement_areas", [])),
+                 result.get("recommendation", ""), result.get("summary", ""), now))
+        else:
+            _execute(conn,
+                """INSERT OR REPLACE INTO interview_results (id, interview_id, overall_score, category_scores,
+                   top_strengths, improvement_areas, recommendation, summary, evaluated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (result_id, interview_id, result.get("overall_score", 0),
+                 _json_field(result.get("category_scores", {})),
+                 _json_field(result.get("top_strengths", [])),
+                 _json_field(result.get("improvement_areas", [])),
+                 result.get("recommendation", ""), result.get("summary", ""), now))
+    return result_id
+
+
+def get_interview_result(interview_id):
+    """Get interview result."""
+    with _get_db() as conn:
+        row = _fetchone(conn,
+            "SELECT * FROM interview_results WHERE interview_id = ?", (interview_id,))
+        if not row:
+            return None
+        r = dict(row)
+        r["category_scores"] = _parse_json_field(r["category_scores"])
+        r["top_strengths"] = _parse_json_field(r["top_strengths"])
+        r["improvement_areas"] = _parse_json_field(r["improvement_areas"])
+        return r
+
+
+# ─── Phase 2: HR User Storage ───
+
+def register_hr_user(email, password, full_name, company):
+    """Register an HR user."""
+    with _get_db() as conn:
+        row = _fetchone(conn, "SELECT * FROM hr_users WHERE LOWER(email) = LOWER(?)", (email,))
+        if row:
+            return None, "Email already registered"
+
+        hr_id = _gen_id()
+        now = datetime.now().isoformat()
+        _execute(conn,
+            "INSERT INTO hr_users (id, email, password_hash, full_name, company, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (hr_id, email.lower(), _hash_password(password), full_name, company, now))
+
+        return {"id": hr_id, "email": email.lower(), "full_name": full_name, "company": company}, None
+
+
+def login_hr_user(email, password):
+    """Authenticate HR user."""
+    with _get_db() as conn:
+        row = _fetchone(conn, "SELECT * FROM hr_users WHERE LOWER(email) = LOWER(?)", (email,))
+        if not row:
+            return None, "User not found"
+        hr = dict(row)
+        if hr["password_hash"] != _hash_password(password):
+            return None, "Invalid password"
+        return hr, None
+
+
+def get_all_candidates_with_results():
+    """Get all candidates with their latest interview results (for HR dashboard)."""
+    with _get_db() as conn:
+        rows = _fetchall(conn, """
+            SELECT u.user_id, u.full_name, u.email, u.tech_stack, u.interest_areas,
+                   u.created_at as registered_at
+            FROM users u ORDER BY u.created_at DESC
+        """)
+        for r in rows:
+            r["tech_stack"] = _parse_json_field(r["tech_stack"])
+            r["interest_areas"] = _parse_json_field(r["interest_areas"])
+            # Get their interviews
+            interviews = _fetchall(conn,
+                "SELECT * FROM ai_interviews WHERE user_id = ? ORDER BY created_at DESC",
+                (r["user_id"],))
+            r["interviews"] = []
+            for iv in interviews:
+                iv["questions"] = _parse_json_field(iv["questions"])
+                result = _fetchone(conn,
+                    "SELECT * FROM interview_results WHERE interview_id = ?", (iv["id"],))
+                if result:
+                    result = dict(result)
+                    result["category_scores"] = _parse_json_field(result["category_scores"])
+                    result["top_strengths"] = _parse_json_field(result["top_strengths"])
+                    result["improvement_areas"] = _parse_json_field(result["improvement_areas"])
+                iv["result"] = result
+                r["interviews"].append(iv)
+        return rows
