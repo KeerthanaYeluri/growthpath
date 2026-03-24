@@ -26,6 +26,10 @@ from gap_map import generate_gap_map
 from quick_assessment import generate_quick_assessment, score_assessment, compute_elo_from_assessment
 from dual_scorer import dual_score, classify_answer_quality
 from mock_engine import create_mock_session, create_targeted_practice, can_start_mock, ROUND_TYPES as MOCK_ROUND_TYPES
+from ai_interviewer import (
+    create_conversation_state, process_candidate_response,
+    get_conversation_summary, generate_ai_response,
+)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -661,6 +665,99 @@ def submit_mock_answers():
         "readiness": readiness,
         "scorecard": scorecard,
     })
+
+
+# ─── AI Interviewer Conversation (v2 Sprint 4) ───
+
+# In-memory conversation states (keyed by session_id + question_id)
+_conversation_states = {}
+
+@app.route("/api/conversation/start", methods=["POST"])
+@auth_required
+def start_conversation():
+    """Start an AI interviewer conversation for a specific question."""
+    data = request.json
+    session_id = data.get("session_id")
+    question = data.get("question", {})  # {id, question, pattern, round_type, ...}
+    company = data.get("company", "google")
+
+    if not session_id or not question.get("id"):
+        return jsonify({"error": "session_id and question are required"}), 400
+
+    conv_key = f"{session_id}_{question['id']}"
+    state = create_conversation_state(question, question.get("round_type", "phone_screen"), company)
+    _conversation_states[conv_key] = state
+
+    return jsonify({
+        "conversation_key": conv_key,
+        "interviewer_message": question.get("question", ""),
+        "probe_depth": 0,
+        "max_depth": 5,
+    })
+
+
+@app.route("/api/conversation/respond", methods=["POST"])
+@auth_required
+def conversation_respond():
+    """Submit candidate answer and get AI interviewer follow-up."""
+    data = request.json
+    conv_key = data.get("conversation_key")
+    answer_text = data.get("answer_text", "")
+    hint_requested = data.get("hint_requested", False)
+
+    if not conv_key:
+        return jsonify({"error": "conversation_key is required"}), 400
+
+    state = _conversation_states.get(conv_key)
+    if not state:
+        return jsonify({"error": "Conversation not found. Start a new conversation."}), 404
+
+    if state.get("is_complete"):
+        return jsonify({"error": "Conversation is complete. Move to the next question."}), 400
+
+    state, result = process_candidate_response(state, answer_text, hint_requested)
+    _conversation_states[conv_key] = state
+
+    return jsonify({
+        "interviewer_response": result["response"],
+        "quality": result["quality"],
+        "score": result["score"],
+        "probe_depth": result["probe_depth"],
+        "is_hint": result["is_hint"],
+        "is_complete": state["is_complete"],
+        "hints_used": state["hints_used"],
+        "used_llm": result["used_llm"],
+    })
+
+
+@app.route("/api/conversation/summary", methods=["POST"])
+@auth_required
+def conversation_summary():
+    """Get summary of a completed conversation for scoring."""
+    data = request.json
+    conv_key = data.get("conversation_key")
+
+    state = _conversation_states.get(conv_key)
+    if not state:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    summary = get_conversation_summary(state)
+    return jsonify(summary)
+
+
+@app.route("/api/conversation/end", methods=["POST"])
+@auth_required
+def end_conversation():
+    """End a conversation and clean up state."""
+    data = request.json
+    conv_key = data.get("conversation_key")
+
+    state = _conversation_states.pop(conv_key, None)
+    if not state:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    summary = get_conversation_summary(state)
+    return jsonify({"summary": summary, "ended": True})
 
 
 # ─── Dashboard ───

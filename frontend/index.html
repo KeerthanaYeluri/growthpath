@@ -821,6 +821,12 @@ function MockInterviewScreen({ onComplete, onNavigate }) {
     const [submitting, setSubmitting] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState("");
+    const [convKey, setConvKey] = useState(null);
+    const [convMessages, setConvMessages] = useState([]);
+    const [convLoading, setConvLoading] = useState(false);
+    const [convDepth, setConvDepth] = useState(0);
+    const [convComplete, setConvComplete] = useState(false);
+    const [hintsUsed, setHintsUsed] = useState(0);
     const timerRef = useRef(null);
 
     useEffect(() => {
@@ -866,6 +872,50 @@ function MockInterviewScreen({ onComplete, onNavigate }) {
 
     const handleAnswer = (text) => {
         if (currentQ) setAnswers(prev => ({...prev, [currentQ.id]: text}));
+    };
+
+    // Reset conversation when switching questions
+    useEffect(() => {
+        setConvKey(null); setConvMessages([]); setConvDepth(0); setConvComplete(false);
+    }, [currentRound, currentQIdx]);
+
+    const startConversation = async () => {
+        if (!currentQ || !sessionId) return;
+        setConvLoading(true);
+        try {
+            const res = await apiFetch("/conversation/start", {
+                method: "POST",
+                body: JSON.stringify({ session_id: sessionId, question: currentQ, company: mockData.company }),
+            });
+            const data = await res.json();
+            setConvKey(data.conversation_key);
+            setConvMessages([{ role: "interviewer", content: currentQ.question }]);
+            setConvDepth(0); setConvComplete(false);
+        } catch { setError("Failed to start conversation"); }
+        setConvLoading(false);
+    };
+
+    const sendToInterviewer = async (hintMode = false) => {
+        if (!convKey || convComplete) return;
+        const answerText = answers[currentQ?.id] || "";
+        if (!answerText.trim() && !hintMode) return;
+        setConvLoading(true);
+        setConvMessages(prev => [...prev, { role: "candidate", content: hintMode ? "[Requested hint]" : answerText }]);
+        try {
+            const res = await apiFetch("/conversation/respond", {
+                method: "POST",
+                body: JSON.stringify({ conversation_key: convKey, answer_text: answerText, hint_requested: hintMode }),
+            });
+            const data = await res.json();
+            setConvMessages(prev => [...prev, {
+                role: "interviewer", content: data.interviewer_response,
+                quality: data.quality, depth: data.probe_depth, isHint: data.is_hint,
+            }]);
+            setConvDepth(data.probe_depth);
+            setConvComplete(data.is_complete);
+            if (data.is_hint) setHintsUsed(data.hints_used);
+        } catch { setError("AI interviewer unavailable"); }
+        setConvLoading(false);
     };
 
     const advanceRound = () => {
@@ -1017,6 +1067,59 @@ function MockInterviewScreen({ onComplete, onNavigate }) {
                     <div className="flex justify-between items-center mt-1">
                         <p className="text-slate-600 text-[10px]">{(answers[currentQ.id]||"").split(/\s+/).filter(Boolean).length} words</p>
                         <p className="text-slate-600 text-[10px]">{currentQ.answer_mode === 'code' ? 'Code Editor' : currentQ.answer_mode === 'voice' ? 'Voice (text fallback)' : 'Hybrid'}</p>
+                    </div>
+
+                    {/* AI Interviewer Conversation */}
+                    <div className="mt-4 border-t border-slate-700/30 pt-4">
+                        {!convKey ? (
+                            <button onClick={startConversation} disabled={convLoading || !(answers[currentQ.id]||"").trim()}
+                                className="px-4 py-2 rounded-xl text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30">
+                                {convLoading ? "Starting..." : "Get AI Interviewer Feedback"}
+                            </button>
+                        ) : (
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-purple-300 text-xs font-semibold uppercase tracking-wider">AI Interviewer</p>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-500 text-[10px]">Depth: {convDepth}/5</span>
+                                        {hintsUsed > 0 && <span className="text-amber-400 text-[10px]">{hintsUsed} hint{hintsUsed>1?'s':''} used</span>}
+                                        {convComplete && <span className="text-emerald-400 text-[10px]">Complete</span>}
+                                    </div>
+                                </div>
+                                {/* Depth progress */}
+                                <div className="flex gap-1 mb-3">
+                                    {[1,2,3,4,5].map(d => (
+                                        <div key={d} className={`flex-1 h-1 rounded-full ${d <= convDepth ? 'bg-purple-500' : 'bg-slate-700'}`}></div>
+                                    ))}
+                                </div>
+                                {/* Messages */}
+                                <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+                                    {convMessages.slice(1).map((msg, i) => (
+                                        <div key={i} className={`flex ${msg.role === 'candidate' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${msg.role === 'candidate' ? 'bg-indigo-600/20 text-indigo-200' : 'bg-slate-800/80 text-slate-300'}`}>
+                                                {msg.isHint && <span className="text-amber-400 text-[9px] block mb-0.5">Hint (-penalty)</span>}
+                                                {msg.content}
+                                                {msg.quality && <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${msg.quality === 'strong' ? 'bg-emerald-500/20 text-emerald-300' : msg.quality === 'average' ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>{msg.quality}</span>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {convLoading && <div className="flex justify-start"><div className="bg-slate-800/80 px-3 py-2 rounded-xl text-xs text-slate-500">Thinking...</div></div>}
+                                </div>
+                                {/* Response buttons */}
+                                {!convComplete && (
+                                    <div className="flex gap-2">
+                                        <button onClick={() => sendToInterviewer(false)} disabled={convLoading || !(answers[currentQ.id]||"").trim()}
+                                            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30">
+                                            Send Updated Answer
+                                        </button>
+                                        <button onClick={() => sendToInterviewer(true)} disabled={convLoading}
+                                            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-500/20 transition-all disabled:opacity-30">
+                                            Get Hint (-penalty)
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
