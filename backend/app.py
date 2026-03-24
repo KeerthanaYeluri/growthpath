@@ -34,6 +34,10 @@ from rubric_reveal import (
     generate_rubric_reveal, generate_all_rubric_reveals,
     simulate_hiring_committee, compute_pattern_mastery,
 )
+from path_reorder import (
+    reorder_learning_path, get_mock_replay, get_score_comparison,
+    check_and_celebrate, check_resurface_topics,
+)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -825,6 +829,100 @@ def get_pattern_mastery():
 
     mastery = compute_pattern_mastery(all_results)
     return jsonify(mastery)
+
+
+# ─── Path Reorder + Replay + Readiness (v2 Sprint 7) ───
+
+@app.route("/api/learning/reorder", methods=["POST"])
+@auth_required
+def reorder_path():
+    """Reorder learning path based on weak patterns from latest mock."""
+    data = request.json
+    weak_patterns = data.get("weak_patterns", [])
+
+    if not weak_patterns:
+        # Auto-detect from latest session
+        sessions = storage.get_user_sessions(g.user_id)
+        for s in sorted(sessions, key=lambda x: x.get("end_time", ""), reverse=True):
+            sc = s.get("scorecard", {})
+            if sc.get("weak_patterns"):
+                weak_patterns = sc["weak_patterns"]
+                break
+
+    user = storage.get_user(g.user_id)
+    company = user.get("target_company", "google") if user else "google"
+
+    plan, changes = reorder_learning_path(g.user_id, weak_patterns, company)
+    if plan is None:
+        return jsonify({"error": changes}), 400
+
+    return jsonify({
+        "reordered": len(changes) > 0,
+        "changes": changes,
+        "total_topics": len(plan.get("topics", [])),
+    })
+
+
+@app.route("/api/learning/manual-reorder", methods=["PUT"])
+@auth_required
+def manual_reorder_path():
+    """User manually reorders their learning path (drag-and-drop)."""
+    data = request.json
+    new_order = data.get("topic_ids", [])  # List of topic_ids in desired order
+
+    if not new_order:
+        return jsonify({"error": "topic_ids list required"}), 400
+
+    plan = storage.get_learning_plan(g.user_id)
+    if not plan:
+        return jsonify({"error": "No learning plan found"}), 404
+
+    topics = plan.get("topics", [])
+    topic_map = {t["topic_id"]: t for t in topics}
+
+    reordered = []
+    for tid in new_order:
+        if tid in topic_map:
+            reordered.append(topic_map.pop(tid))
+
+    # Append any remaining topics not in new_order
+    for t in topics:
+        if t["topic_id"] in topic_map:
+            reordered.append(t)
+
+    plan["topics"] = reordered
+    storage.save_learning_plan(g.user_id, plan)
+
+    return jsonify({"success": True, "total_topics": len(reordered)})
+
+
+@app.route("/api/mock/<session_id>/replay", methods=["GET"])
+@auth_required
+def get_replay(session_id):
+    """Get full replay data for a completed mock (read-only, no ELO impact)."""
+    replay, err = get_mock_replay(session_id)
+    if err:
+        return jsonify({"error": err}), 404
+    return jsonify(replay)
+
+
+@app.route("/api/mock/comparison", methods=["GET"])
+@auth_required
+def get_comparison():
+    """Get score comparison across recent mock attempts."""
+    limit = request.args.get("limit", 10, type=int)
+    comparisons = get_score_comparison(g.user_id, limit)
+    return jsonify({"comparisons": comparisons, "total": len(comparisons)})
+
+
+@app.route("/api/readiness", methods=["GET"])
+@auth_required
+def get_readiness():
+    """Check Interview Ready status and whether to celebrate."""
+    result = check_and_celebrate(g.user_id)
+    if not result:
+        return jsonify({"error": "User or ELO data not found"}), 404
+    return jsonify(result)
 
 
 # ─── Dashboard ───

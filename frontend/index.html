@@ -1316,15 +1316,22 @@ function DashboardScreen({ onNavigate }) {
     const [data, setData] = useState(null);
     const [eloData, setEloData] = useState(null);
     const [gapMap, setGapMap] = useState(null);
+    const [readiness, setReadiness] = useState(null);
+    const [comparison, setComparison] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [showCelebration, setShowCelebration] = useState(false);
 
     useEffect(() => {
         Promise.all([
             apiFetch("/dashboard").then(r => r.json()),
             apiFetch("/elo").then(r => r.ok ? r.json() : null).catch(() => null),
             apiFetch("/gap-map").then(r => r.ok ? r.json() : null).catch(() => null),
-        ]).then(([d, e, g]) => {
-            setData(d); setEloData(e); setGapMap(g); setLoading(false);
+            apiFetch("/readiness").then(r => r.ok ? r.json() : null).catch(() => null),
+            apiFetch("/mock/comparison?limit=5").then(r => r.ok ? r.json() : null).catch(() => null),
+        ]).then(([d, e, g, r, c]) => {
+            setData(d); setEloData(e); setGapMap(g); setReadiness(r); setComparison(c);
+            if (r?.celebrate) setShowCelebration(true);
+            setLoading(false);
         }).catch(() => setLoading(false));
     }, []);
 
@@ -1333,8 +1340,8 @@ function DashboardScreen({ onNavigate }) {
 
     const { user, stats, plan_progress, next_topic, plan_timeline, quota, overall_proficiency } = data;
     const pp = plan_progress || {};
-    const readiness = eloData?.readiness || {};
-    const eloPercent = eloData ? Math.min(100, (eloData.overall / (readiness.hiring_bar || 1800)) * 100) : 0;
+    const eloReadiness = eloData?.readiness || {};
+    const eloPercent = eloData ? Math.min(100, (eloData.overall / (eloReadiness.hiring_bar || 1800)) * 100) : 0;
 
     return (
         <div className="max-w-5xl mx-auto p-4 md:p-6 fade-in">
@@ -1374,18 +1381,54 @@ function DashboardScreen({ onNavigate }) {
                             </div>
                             <div className="flex items-center justify-between text-[10px]">
                                 <span className="text-slate-500">You: {eloData.overall}</span>
-                                <span className="text-slate-500">Bar: {readiness.hiring_bar || "—"}</span>
+                                <span className="text-slate-500">Bar: {eloReadiness.hiring_bar || "—"}</span>
                             </div>
                             <p className="mt-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${readiness.is_ready ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                                    {readiness.readiness?.label || "—"}
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${eloReadiness.is_ready ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                    {eloReadiness.readiness?.label || "—"}
                                 </span>
                             </p>
-                            {readiness.gap > 0 && <p className="text-slate-500 text-[10px] mt-1">{readiness.gap} points to go</p>}
+                            {eloReadiness.gap > 0 && <p className="text-slate-500 text-[10px] mt-1">{eloReadiness.gap} points to go</p>}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Interview Ready Celebration */}
+            {showCelebration && (
+                <div className="glass-strong rounded-2xl p-6 mb-6 text-center glow-green border border-emerald-500/30 fade-in">
+                    <p className="text-4xl mb-2">🎉</p>
+                    <h2 className="text-2xl font-bold text-emerald-400 mb-1">You're Interview Ready!</h2>
+                    <p className="text-slate-400 text-sm mb-3">Your ELO of {readiness?.elo} has reached the {readiness?.company} {readiness?.level} hiring bar of {readiness?.hiring_bar}</p>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={() => setShowCelebration(false)} className="px-4 py-2 rounded-xl text-xs bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/20">
+                            Keep Practicing
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Score Comparison (ELO over time) */}
+            {comparison?.comparisons?.length > 1 && (
+                <div className="glass rounded-xl p-4 mb-6">
+                    <h3 className="text-white text-xs font-semibold mb-3 uppercase tracking-wider">Mock Interview History</h3>
+                    <div className="flex items-end gap-2 h-16">
+                        {comparison.comparisons.slice().reverse().map((c, i) => {
+                            const maxElo = Math.max(...comparison.comparisons.map(x => x.elo_after || 1200));
+                            const height = Math.max(10, ((c.elo_after || 1200) / maxElo) * 100);
+                            return (
+                                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                    <span className={`text-[9px] font-medium ${(c.elo_delta||0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {(c.elo_delta||0) >= 0 ? '+' : ''}{c.elo_delta||0}
+                                    </span>
+                                    <div className="w-full bg-indigo-500/60 rounded-t" style={{height: `${height}%`}}></div>
+                                    <span className="text-[8px] text-slate-500">{c.elo_after||"—"}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* v2: Sub-ELO Breakdown */}
             {eloData?.sub_elos && (
