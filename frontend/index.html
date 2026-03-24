@@ -810,6 +810,239 @@ function QuickAssessmentScreen({ onComplete, onSkip }) {
     );
 }
 
+function MockInterviewScreen({ onComplete, onNavigate }) {
+    const [loading, setLoading] = useState(true);
+    const [mockData, setMockData] = useState(null);
+    const [sessionId, setSessionId] = useState(null);
+    const [currentRound, setCurrentRound] = useState(0);
+    const [currentQIdx, setCurrentQIdx] = useState(0);
+    const [answers, setAnswers] = useState({});
+    const [timeLeft, setTimeLeft] = useState(0);
+    const [submitting, setSubmitting] = useState(false);
+    const [results, setResults] = useState(null);
+    const [error, setError] = useState("");
+    const timerRef = useRef(null);
+
+    useEffect(() => {
+        apiFetch("/mock/start", { method: "POST" })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) { setError(data.error); setLoading(false); return; }
+                setSessionId(data.session_id);
+                setMockData(data);
+                setTimeLeft(data.rounds[0].time_minutes * 60);
+                setLoading(false);
+            })
+            .catch(() => { setError("Cannot start mock interview"); setLoading(false); });
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, []);
+
+    // Timer
+    useEffect(() => {
+        if (!mockData || results) return;
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    // Auto-advance round
+                    clearInterval(timerRef.current);
+                    if (currentRound < mockData.rounds.length - 1) {
+                        setTimeout(() => advanceRound(), 500);
+                    }
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timerRef.current);
+    }, [currentRound, mockData, results]);
+
+    const round = mockData?.rounds?.[currentRound];
+    const allQsInRound = round?.questions || [];
+    const currentQ = allQsInRound[currentQIdx];
+    const totalAnswered = Object.keys(answers).length;
+    const totalQs = mockData?.total_questions || 0;
+    const formatTime = (s) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+
+    const handleAnswer = (text) => {
+        if (currentQ) setAnswers(prev => ({...prev, [currentQ.id]: text}));
+    };
+
+    const advanceRound = () => {
+        if (currentRound < (mockData?.rounds?.length || 0) - 1) {
+            const nextRound = currentRound + 1;
+            setCurrentRound(nextRound);
+            setCurrentQIdx(0);
+            setTimeLeft(mockData.rounds[nextRound].time_minutes * 60);
+        }
+    };
+
+    const handleNext = () => {
+        if (currentQIdx < allQsInRound.length - 1) {
+            setCurrentQIdx(currentQIdx + 1);
+        } else if (currentRound < (mockData?.rounds?.length || 0) - 1) {
+            advanceRound();
+        }
+    };
+
+    const handlePrev = () => {
+        if (currentQIdx > 0) setCurrentQIdx(currentQIdx - 1);
+    };
+
+    const handleSubmitAll = async () => {
+        setSubmitting(true);
+        if (timerRef.current) clearInterval(timerRef.current);
+        const allQuestions = mockData.rounds.flatMap(r => r.questions);
+        const answerList = allQuestions.map(q => ({
+            question_id: q.id, answer_text: answers[q.id] || "",
+        }));
+        try {
+            const res = await apiFetch(`/mock/${sessionId}/submit`, {
+                method: "POST",
+                body: JSON.stringify({ session_id: sessionId, answers: answerList }),
+            });
+            const data = await res.json();
+            if (data.error) { setError(data.error); setSubmitting(false); return; }
+            setResults(data);
+        } catch { setError("Failed to submit"); }
+        setSubmitting(false);
+    };
+
+    if (loading) return <LoadingSpinner />;
+    if (error && !mockData) return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="glass-strong rounded-2xl p-8 max-w-md text-center">
+                <p className="text-red-400 mb-4">{error}</p>
+                <button onClick={() => onNavigate("dashboard")} className="px-6 py-2 rounded-xl text-sm bg-slate-700 hover:bg-slate-600 text-white">Back to Dashboard</button>
+            </div>
+        </div>
+    );
+
+    // Results
+    if (results) {
+        const elo = results.elo;
+        const sc = results.scorecard;
+        const readiness = results.readiness;
+        return (
+            <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+                <div className="text-center mb-6">
+                    <h2 className="text-2xl font-bold mb-1">Mock Interview Complete</h2>
+                    <p className="text-slate-400 text-sm">{mockData.company?.charAt(0).toUpperCase() + mockData.company?.slice(1)} | {(mockData.role||"").replace(/_/g," ")} | {mockData.level}</p>
+                </div>
+                {/* ELO Change */}
+                <div className="glass-strong rounded-2xl p-6 mb-6 text-center glow">
+                    <p className="text-slate-500 text-xs uppercase mb-1">ELO Rating</p>
+                    <div className="flex items-center justify-center gap-3">
+                        <span className="text-slate-500 text-xl">{elo.before}</span>
+                        <span className="text-2xl">{elo.delta >= 0 ? "→" : "→"}</span>
+                        <span className="text-4xl font-black text-indigo-400">{elo.after}</span>
+                        <span className={`text-sm font-bold ${elo.delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{elo.delta >= 0 ? '+' : ''}{elo.delta}</span>
+                    </div>
+                    <p className="mt-2"><span className={`px-3 py-1 rounded-full text-xs ${readiness.is_ready ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{readiness.readiness?.label}</span></p>
+                    {readiness.gap > 0 && <p className="text-slate-500 text-xs mt-1">{readiness.gap} points to {mockData.company} bar</p>}
+                </div>
+                {/* Round Scores */}
+                <div className="glass rounded-xl p-5 mb-6">
+                    <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Round Scores</h3>
+                    <div className="space-y-3">
+                        {mockData.rounds.map(rnd => {
+                            const score = sc?.per_round?.[rnd.round_type] || 0;
+                            return (
+                                <div key={rnd.round_type} className="flex items-center gap-3">
+                                    <span className="text-slate-400 text-xs w-32">{rnd.label}</span>
+                                    <div className="flex-1 bg-slate-800/50 rounded-full h-2.5">
+                                        <div className={`h-2.5 rounded-full transition-all ${score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                            style={{width: `${score}%`}}></div>
+                                    </div>
+                                    <span className="text-slate-300 text-sm w-10 text-right font-medium">{score}</span>
+                                    {rnd.is_critical && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">critical</span>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                {/* Focus Areas */}
+                {sc?.recommended_focus?.length > 0 && (
+                    <div className="glass rounded-xl p-4 mb-6">
+                        <h3 className="text-red-400 text-sm font-semibold mb-2 uppercase tracking-wider">Focus Areas</h3>
+                        <div className="flex flex-wrap gap-2">
+                            {sc.recommended_focus.map(f => <span key={f} className="px-3 py-1 rounded-full bg-red-500/20 text-red-300 text-xs">{f}</span>)}
+                        </div>
+                    </div>
+                )}
+                <div className="flex gap-3">
+                    <button onClick={() => onNavigate("dashboard")} className="flex-1 py-3 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                        Back to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Interview in progress
+    return (
+        <div className="max-w-3xl mx-auto p-4 md:p-6 fade-in">
+            {/* Round Indicator */}
+            <div className="flex items-center gap-1.5 mb-4">
+                {mockData.rounds.map((r, i) => (
+                    <div key={r.round_type} className={`flex-1 h-1.5 rounded-full transition-all ${i < currentRound ? 'bg-emerald-500' : i === currentRound ? 'bg-indigo-500' : 'bg-slate-700'}`}></div>
+                ))}
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-lg font-bold">{round?.label}</h2>
+                    <p className="text-slate-500 text-xs">Round {currentRound + 1}/5 | Q{currentQIdx + 1}/{allQsInRound.length} | {totalAnswered}/{totalQs} total</p>
+                </div>
+                <div className={`glass rounded-xl px-4 py-2 text-center ${timeLeft < 30 ? 'border-red-500/50' : ''}`}>
+                    <p className={`text-xl font-bold font-mono ${timeLeft < 30 ? 'text-red-400' : 'text-white'}`}>{formatTime(timeLeft)}</p>
+                    <p className="text-slate-500 text-[10px]">{round?.answer_mode} mode</p>
+                </div>
+            </div>
+
+            {currentQ && (
+                <div className="glass-strong rounded-2xl p-6">
+                    <div className="flex gap-2 mb-3">
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] uppercase">{currentQ.round_type?.replace(/_/g," ")}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 text-[10px]">{currentQ.pattern}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${currentQ.difficulty==='hard' ? 'bg-red-500/20 text-red-300' : currentQ.difficulty==='easy' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{currentQ.difficulty}</span>
+                    </div>
+                    <p className="text-white text-base mb-4 leading-relaxed">{currentQ.question}</p>
+                    <textarea value={answers[currentQ.id] || ""} onChange={e => handleAnswer(e.target.value)}
+                        placeholder={currentQ.answer_mode === 'code' ? 'Write your code/solution here...' : 'Explain your answer thoroughly — show your thinking process...'}
+                        rows={currentQ.answer_mode === 'code' ? 12 : 8}
+                        className={`w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all resize-none ${currentQ.answer_mode === 'code' ? 'font-mono text-emerald-300' : 'text-white'}`}
+                    />
+                    <div className="flex justify-between items-center mt-1">
+                        <p className="text-slate-600 text-[10px]">{(answers[currentQ.id]||"").split(/\s+/).filter(Boolean).length} words</p>
+                        <p className="text-slate-600 text-[10px]">{currentQ.answer_mode === 'code' ? 'Code Editor' : currentQ.answer_mode === 'voice' ? 'Voice (text fallback)' : 'Hybrid'}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Navigation */}
+            <div className="flex items-center justify-between mt-4">
+                <button onClick={handlePrev} disabled={currentQIdx === 0 && currentRound === 0}
+                    className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white disabled:opacity-30 transition-all">Previous</button>
+                <div className="flex gap-2">
+                    {(currentQIdx < allQsInRound.length - 1 || currentRound < mockData.rounds.length - 1) ? (
+                        <button onClick={handleNext} className="px-6 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                            {currentQIdx < allQsInRound.length - 1 ? "Next Question" : "Next Round →"}
+                        </button>
+                    ) : (
+                        <button onClick={handleSubmitAll} disabled={submitting}
+                            className="px-6 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50">
+                            {submitting ? "Evaluating..." : "Submit Mock Interview"}
+                        </button>
+                    )}
+                </div>
+            </div>
+            {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+        </div>
+    );
+}
+
 function ChangePasswordScreen({ onComplete }) {
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
@@ -3125,7 +3358,7 @@ function App() {
     if (authState === "quick_assessment") return <QuickAssessmentScreen onComplete={handleQuickAssessmentComplete} onSkip={() => { setAuthState("authenticated"); setScreen("dashboard"); }} />;
 
     // Authenticated app
-    const showNav = !["interview_room", "results", "ai_interview_room"].includes(screen);
+    const showNav = !["interview_room", "results", "ai_interview_room", "mock_interview"].includes(screen);
 
     return (
         <div className="relative min-h-screen">
@@ -3148,6 +3381,7 @@ function App() {
             {screen === "ai_interview" && <AIInterviewHub onNavigate={navigate} />}
             {screen === "ai_interview_room" && <AIInterviewRoom interviewId={screenParams.interviewId} evaluateMode={screenParams.evaluate} onNavigate={navigate} />}
             {screen === "ai_results" && <AIResultsScreen interviewId={screenParams.interviewId} onNavigate={navigate} />}
+            {screen === "mock_interview" && <MockInterviewScreen onComplete={(r) => navigate("dashboard")} onNavigate={navigate} />}
         </div>
     );
 }

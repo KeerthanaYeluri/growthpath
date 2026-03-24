@@ -25,6 +25,7 @@ from elo_rating import create_initial_elo, check_interview_ready, get_readiness_
 from gap_map import generate_gap_map
 from quick_assessment import generate_quick_assessment, score_assessment, compute_elo_from_assessment
 from dual_scorer import dual_score, classify_answer_quality
+from mock_engine import create_mock_session, create_targeted_practice, can_start_mock, ROUND_TYPES as MOCK_ROUND_TYPES
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -491,6 +492,174 @@ def get_quick_assessment_results(session_id):
         "status": session.get("status"),
         "start_time": session.get("start_time"),
         "end_time": session.get("end_time"),
+    })
+
+
+# ─── Mock Interview Engine (v2 Sprint 3) ───
+
+@app.route("/api/mock/start", methods=["POST"])
+@auth_required
+def start_mock_interview():
+    """Start a full 5-round FAANG mock interview."""
+    user = storage.get_user(g.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    company = user.get("target_company", "google")
+    role = user.get("target_role", "backend")
+    level = user.get("target_level", "senior")
+
+    result, err = create_mock_session(g.user_id, company, role, level, "full_mock")
+    if err:
+        return jsonify({"error": err}), 429
+
+    mock_data = result["mock_data"]
+    # Return safe data (no keywords/rubric)
+    safe_rounds = []
+    for rnd in mock_data["rounds"]:
+        safe_qs = [{
+            "id": q["id"], "question": q["question"], "pattern": q["pattern"],
+            "difficulty": q["difficulty"], "round_type": q["round_type"], "answer_mode": q["answer_mode"],
+        } for q in rnd["questions"]]
+        safe_rounds.append({
+            "round_number": rnd["round_number"], "round_type": rnd["round_type"],
+            "label": rnd["label"], "answer_mode": rnd["answer_mode"],
+            "time_minutes": rnd["time_minutes"], "weight": rnd["weight"],
+            "is_critical": rnd["is_critical"], "questions": safe_qs,
+        })
+
+    return jsonify({
+        "session_id": result["session_id"],
+        "rounds": safe_rounds,
+        "total_questions": mock_data["total_questions"],
+        "total_time_minutes": mock_data["total_time_minutes"],
+        "company": company, "role": role, "level": level,
+    })
+
+
+@app.route("/api/mock/can-start", methods=["GET"])
+@auth_required
+def check_can_start_mock():
+    """Check if user can start a mock today."""
+    allowed, reason = can_start_mock(g.user_id)
+    return jsonify({"allowed": allowed, "reason": reason})
+
+
+@app.route("/api/practice/start", methods=["POST"])
+@auth_required
+def start_targeted_practice():
+    """Start a single-round targeted practice session."""
+    data = request.json
+    target_round = data.get("round_type", "phone_screen")
+
+    user = storage.get_user(g.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    company = user.get("target_company", "google")
+    role = user.get("target_role", "backend")
+    level = user.get("target_level", "senior")
+
+    result, err = create_targeted_practice(g.user_id, company, role, level, target_round)
+    if err:
+        return jsonify({"error": err}), 400
+
+    # Return safe questions
+    safe_qs = [{
+        "id": q["id"], "question": q["question"], "pattern": q.get("pattern", ""),
+        "difficulty": q.get("difficulty", "medium"), "round_type": q.get("round_type", target_round),
+        "answer_mode": q.get("answer_mode", "hybrid"),
+    } for q in result["round"]["questions"]]
+
+    return jsonify({
+        "session_id": result["session_id"],
+        "round_type": target_round,
+        "questions": safe_qs,
+        "total_questions": result["total_questions"],
+        "time_minutes": result["time_minutes"],
+        "session_type": "targeted_practice",
+    })
+
+
+@app.route("/api/mock/<session_id>/submit", methods=["POST"])
+@auth_required
+def submit_mock_answers():
+    """Submit all answers for a mock interview and get scored results + ELO update."""
+    data = request.json
+    session_id = data.get("session_id", session_id)
+    answers = data.get("answers", [])
+
+    if not answers:
+        return jsonify({"error": "answers are required"}), 400
+
+    session = storage.get_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    questions = session.get("questions", [])
+    role_name = session.get("role_name", "")
+    is_practice = "practice_" in role_name
+
+    # Score with dual scorer
+    results = score_assessment(answers, questions)
+
+    # ELO update
+    user = storage.get_user(g.user_id)
+    elo_data = storage.get_elo_ratings(g.user_id)
+    if elo_data:
+        current_elo = elo_data["overall"]
+        sub_elos = elo_data["sub_elos"]
+    else:
+        current_elo = 1200
+        sub_elos = {rt: 1200 for rt in MOCK_ROUND_TYPES}
+
+    session_type = "targeted_practice" if is_practice else "full_mock"
+    elo_result = compute_elo_from_assessment(current_elo, sub_elos, results)
+
+    # Apply practice multiplier already handled in elo_rating module via session_type
+    new_overall = elo_result["overall"]["new_elo"]
+    new_sub_elos = dict(sub_elos)
+    for rt, change in elo_result["sub_elos"].items():
+        new_sub_elos[rt] = change["new_elo"]
+
+    storage.save_elo_ratings(g.user_id, new_overall, new_sub_elos)
+    storage.add_elo_history(
+        g.user_id, session_id, session_type,
+        current_elo, new_overall, elo_result["overall"]["delta"],
+        {rt: c["delta"] for rt, c in elo_result["sub_elos"].items()},
+    )
+
+    # Finish session
+    scorecard = {
+        "overall_score": results["overall_score"],
+        "per_round": results["per_round"],
+        "pattern_scores": results.get("pattern_scores", {}),
+        "weak_patterns": results["weak_patterns"],
+        "strong_patterns": results["strong_patterns"],
+        "recommended_focus": results["recommended_focus"],
+        "elo_before": current_elo,
+        "elo_after": new_overall,
+        "elo_delta": elo_result["overall"]["delta"],
+        "session_type": session_type,
+    }
+    storage.finish_session(session_id, scorecard)
+
+    # Regenerate learning path
+    learning_engine.generate_learning_plan(g.user_id)
+
+    company = user.get("target_company", "google")
+    level = user.get("target_level", "senior")
+    readiness = check_interview_ready(new_overall, company, level)
+
+    return jsonify({
+        "results": results,
+        "elo": {
+            "before": current_elo, "after": new_overall,
+            "delta": elo_result["overall"]["delta"],
+            "sub_elo_changes": elo_result["sub_elos"],
+        },
+        "readiness": readiness,
+        "scorecard": scorecard,
     })
 
 
