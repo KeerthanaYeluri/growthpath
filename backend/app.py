@@ -23,6 +23,8 @@ from company_profiles import (
 )
 from elo_rating import create_initial_elo, check_interview_ready, get_readiness_label
 from gap_map import generate_gap_map
+from quick_assessment import generate_quick_assessment, score_assessment, compute_elo_from_assessment
+from dual_scorer import dual_score, classify_answer_quality
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -323,6 +325,172 @@ def get_company_profile_endpoint(company):
         "round_weights": profile["round_weights"],
         "critical_rounds": profile["critical_rounds"],
         "rounds": rounds,
+    })
+
+
+# ─── Quick Assessment (v2 Sprint 2) ───
+
+@app.route("/api/quick-assessment/start", methods=["POST"])
+@auth_required
+def start_quick_assessment():
+    """Start a Quick Assessment for new users (Interview First flow)."""
+    user = storage.get_user(g.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    company = user.get("target_company", "google")
+    role = user.get("target_role", "backend")
+    level = user.get("target_level", "senior")
+
+    if not company or not role or not level:
+        return jsonify({"error": "Set target company/role/level in profile first"}), 400
+
+    assessment = generate_quick_assessment(company, role, level)
+
+    # Store as a session
+    session_id = storage.create_session(
+        g.user_id,
+        f"Quick Assessment - {company.title()} {role}",
+        assessment["questions"],
+        f"quick_assessment_{company}_{role}",
+    )
+    if isinstance(session_id, dict):
+        sid = session_id.get("session_id", session_id.get("id"))
+    else:
+        sid = session_id
+
+    # Return safe questions (no keywords/rubric)
+    safe_questions = [{
+        "id": q["id"],
+        "question": q["question"],
+        "pattern": q["pattern"],
+        "difficulty": q["difficulty"],
+        "round_type": q["round_type"],
+        "answer_mode": q["answer_mode"],
+    } for q in assessment["questions"]]
+
+    return jsonify({
+        "session_id": sid,
+        "questions": safe_questions,
+        "total_questions": assessment["total_questions"],
+        "company": company,
+        "role": role,
+        "level": level,
+    })
+
+
+@app.route("/api/quick-assessment/submit", methods=["POST"])
+@auth_required
+def submit_quick_assessment():
+    """Submit all answers for a Quick Assessment and get results + ELO update."""
+    data = request.json
+    session_id = data.get("session_id")
+    answers = data.get("answers", [])  # [{question_id, answer_text}]
+
+    if not session_id or not answers:
+        return jsonify({"error": "session_id and answers are required"}), 400
+
+    # Get session with full questions
+    session = storage.get_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    questions = session.get("questions", [])
+    if not questions:
+        return jsonify({"error": "No questions found in session"}), 400
+
+    # Score all answers
+    results = score_assessment(answers, questions)
+
+    # Get current ELO
+    user = storage.get_user(g.user_id)
+    elo_data = storage.get_elo_ratings(g.user_id)
+
+    if elo_data:
+        current_elo = elo_data["overall"]
+        sub_elos = elo_data["sub_elos"]
+    else:
+        from company_profiles import get_starting_elo as _get_starting_elo
+        level = user.get("target_level", "senior")
+        starting, _ = _get_starting_elo(level)
+        current_elo = starting or 1200
+        sub_elos = {rt: current_elo for rt in ["phone_screen", "system_design", "behavioral", "domain_specific", "bar_raiser"]}
+
+    # Compute new ELO
+    elo_result = compute_elo_from_assessment(current_elo, sub_elos, results)
+
+    # Save updated ELO
+    new_overall = elo_result["overall"]["new_elo"]
+    new_sub_elos = {}
+    for rt, change in elo_result["sub_elos"].items():
+        new_sub_elos[rt] = change["new_elo"]
+    # Keep unchanged sub-ELOs
+    for rt in sub_elos:
+        if rt not in new_sub_elos:
+            new_sub_elos[rt] = sub_elos[rt]
+
+    storage.save_elo_ratings(g.user_id, new_overall, new_sub_elos)
+    storage.add_elo_history(
+        g.user_id, session_id, "quick_assessment",
+        current_elo, new_overall, elo_result["overall"]["delta"],
+        {rt: c["delta"] for rt, c in elo_result["sub_elos"].items()},
+    )
+
+    # Generate learning path from failures
+    path_generated = False
+    if results["weak_patterns"]:
+        plan, _ = learning_engine.generate_learning_plan(g.user_id)
+        path_generated = plan is not None
+
+    # Finish session with scorecard
+    scorecard = {
+        "overall_score": results["overall_score"],
+        "per_round": results["per_round"],
+        "pattern_scores": results["pattern_scores"],
+        "weak_patterns": results["weak_patterns"],
+        "strong_patterns": results["strong_patterns"],
+        "recommended_focus": results["recommended_focus"],
+        "elo_before": current_elo,
+        "elo_after": new_overall,
+        "elo_delta": elo_result["overall"]["delta"],
+    }
+    storage.finish_session(session_id, scorecard)
+
+    # Check readiness
+    company = user.get("target_company", "google")
+    level = user.get("target_level", "senior")
+    readiness = check_interview_ready(new_overall, company, level)
+
+    return jsonify({
+        "results": results,
+        "elo": {
+            "before": current_elo,
+            "after": new_overall,
+            "delta": elo_result["overall"]["delta"],
+            "sub_elo_changes": {rt: c for rt, c in elo_result["sub_elos"].items()},
+        },
+        "readiness": readiness,
+        "path_generated": path_generated,
+        "scorecard": scorecard,
+    })
+
+
+@app.route("/api/quick-assessment/results/<session_id>", methods=["GET"])
+@auth_required
+def get_quick_assessment_results(session_id):
+    """Get results of a completed Quick Assessment."""
+    session = storage.get_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+    if session.get("user_id") != g.user_id:
+        return jsonify({"error": "Access denied"}), 403
+
+    return jsonify({
+        "session_id": session_id,
+        "scorecard": session.get("scorecard"),
+        "status": session.get("status"),
+        "start_time": session.get("start_time"),
+        "end_time": session.get("end_time"),
     })
 
 
