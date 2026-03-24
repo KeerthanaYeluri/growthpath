@@ -38,6 +38,7 @@ from path_reorder import (
     reorder_learning_path, get_mock_replay, get_score_comparison,
     check_and_celebrate, check_resurface_topics,
 )
+from rate_cards import get_rate_cards
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -923,6 +924,35 @@ def get_readiness():
     if not result:
         return jsonify({"error": "User or ELO data not found"}), 404
     return jsonify(result)
+
+
+# ─── Rate Cards + Health (v2 Sprint 8) ───
+
+@app.route("/api/rate-cards", methods=["GET"])
+def rate_cards_endpoint():
+    """Get pricing tiers (display only)."""
+    return jsonify({"tiers": get_rate_cards()})
+
+
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    """Health check endpoint for deployment monitoring."""
+    from llm_service import _get_available_providers
+    return jsonify({
+        "status": "healthy",
+        "version": "2.0.0",
+        "llm_providers": _get_available_providers(),
+        "features": {
+            "quick_assessment": True,
+            "full_mock": True,
+            "ai_interviewer": True,
+            "elo_rating": True,
+            "hiring_committee": True,
+            "rubric_reveal": True,
+            "path_reordering": True,
+            "companies": ["google", "apple"],
+        },
+    })
 
 
 # ─── Dashboard ───
