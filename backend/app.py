@@ -30,6 +30,10 @@ from ai_interviewer import (
     create_conversation_state, process_candidate_response,
     get_conversation_summary, generate_ai_response,
 )
+from rubric_reveal import (
+    generate_rubric_reveal, generate_all_rubric_reveals,
+    simulate_hiring_committee, compute_pattern_mastery,
+)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -758,6 +762,69 @@ def end_conversation():
 
     summary = get_conversation_summary(state)
     return jsonify({"summary": summary, "ended": True})
+
+
+# ─── Rubric Reveal + Committee + Patterns (v2 Sprint 5-6) ───
+
+@app.route("/api/mock/<session_id>/rubric", methods=["GET"])
+@auth_required
+def get_mock_rubric(session_id):
+    """Get rubric reveals for all questions in a mock session."""
+    session = storage.get_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    questions = session.get("questions", [])
+    answers_raw = session.get("answers", [])
+
+    # Build answers map from session answers
+    answers_map = {}
+    for a in answers_raw:
+        qid = a.get("question_id")
+        if qid is not None:
+            answers_map[qid] = a.get("transcript", a.get("answer_text", ""))
+
+    reveals = generate_all_rubric_reveals(questions, answers_map)
+    return jsonify({"rubric_reveals": reveals, "session_id": session_id})
+
+
+@app.route("/api/mock/<session_id>/committee", methods=["GET"])
+@auth_required
+def get_hiring_committee(session_id):
+    """Get hiring committee simulation for a completed mock."""
+    session = storage.get_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+    if session.get("status") != "completed":
+        return jsonify({"error": "Mock interview must be completed first"}), 400
+
+    scorecard = session.get("scorecard", {})
+    round_scores = scorecard.get("per_round", {})
+
+    user = storage.get_user(g.user_id)
+    company = user.get("target_company", "google") if user else "google"
+
+    committee = simulate_hiring_committee(round_scores, company)
+    return jsonify(committee)
+
+
+@app.route("/api/patterns", methods=["GET"])
+@auth_required
+def get_pattern_mastery():
+    """Get archetype pattern mastery across all mock interviews."""
+    sessions = storage.get_user_sessions(g.user_id)
+
+    all_results = []
+    for s in sessions:
+        sc = s.get("scorecard")
+        if not sc:
+            continue
+        pattern_scores = sc.get("pattern_scores", {})
+        for pattern, score in pattern_scores.items():
+            all_results.append({"pattern": pattern, "score": score})
+
+    mastery = compute_pattern_mastery(all_results)
+    return jsonify(mastery)
 
 
 # ─── Dashboard ───
