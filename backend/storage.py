@@ -288,7 +288,29 @@ def init_db():
                     role TEXT DEFAULT 'hr',
                     created_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS elo_ratings (
+                    user_id TEXT PRIMARY KEY,
+                    overall INTEGER DEFAULT 1200,
+                    phone_screen INTEGER DEFAULT 1200,
+                    system_design INTEGER DEFAULT 1200,
+                    behavioral INTEGER DEFAULT 1200,
+                    domain_specific INTEGER DEFAULT 1200,
+                    bar_raiser INTEGER DEFAULT 1200,
+                    updated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS elo_history (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    session_id TEXT,
+                    session_type TEXT,
+                    old_elo INTEGER,
+                    new_elo INTEGER,
+                    delta INTEGER,
+                    round_deltas TEXT,
+                    created_at TEXT
+                );
             """)
+            conn.commit()
         else:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -460,7 +482,45 @@ def init_db():
                     role TEXT DEFAULT 'hr',
                     created_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS elo_ratings (
+                    user_id TEXT PRIMARY KEY,
+                    overall INTEGER DEFAULT 1200,
+                    phone_screen INTEGER DEFAULT 1200,
+                    system_design INTEGER DEFAULT 1200,
+                    behavioral INTEGER DEFAULT 1200,
+                    domain_specific INTEGER DEFAULT 1200,
+                    bar_raiser INTEGER DEFAULT 1200,
+                    updated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS elo_history (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    session_id TEXT,
+                    session_type TEXT,
+                    old_elo INTEGER,
+                    new_elo INTEGER,
+                    delta INTEGER,
+                    round_deltas TEXT,
+                    created_at TEXT
+                );
             """)
+
+        # v2 migration: add new columns to users table
+        _migrate_users_v2(conn)
+
+
+def _migrate_users_v2(conn):
+    """Add v2 columns to users table if they don't exist."""
+    new_columns = [
+        ("target_company", "TEXT DEFAULT ''"),
+        ("target_role", "TEXT DEFAULT ''"),
+        ("target_level", "TEXT DEFAULT ''"),
+    ]
+    for col_name, col_def in new_columns:
+        try:
+            _execute(conn, f"ALTER TABLE users ADD COLUMN {col_name} {col_def}", ())
+        except Exception:
+            pass  # Column already exists
 
 
 # Initialize on import
@@ -469,7 +529,8 @@ init_db()
 
 # ─── Users ───
 
-def register_user(full_name, email, tech_stack, interest_areas, hours_per_day):
+def register_user(full_name, email, tech_stack, interest_areas, hours_per_day,
+                   target_company="", target_role="", target_level=""):
     """Register a new user. Returns user dict with generated credentials."""
     with _get_db() as conn:
         row = _fetchone(conn, "SELECT * FROM users WHERE LOWER(email) = LOWER(?)", (email,))
@@ -487,11 +548,13 @@ def register_user(full_name, email, tech_stack, interest_areas, hours_per_day):
 
         _execute(conn,
             """INSERT INTO users (user_id, email, password_hash, full_name, tech_stack,
-               interest_areas, hours_per_day, is_first_login, created_at, last_active_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+               interest_areas, hours_per_day, is_first_login, created_at, last_active_at,
+               target_company, target_role, target_level)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)""",
             (user_id, email.lower(), _hash_password(default_password), full_name,
              _json_field(tech_stack), _json_field(interest_areas),
-             float(hours_per_day), now, now))
+             float(hours_per_day), now, now,
+             target_company.lower(), target_role.lower(), target_level.lower()))
 
         user = {
             "user_id": user_id,
@@ -501,6 +564,9 @@ def register_user(full_name, email, tech_stack, interest_areas, hours_per_day):
             "tech_stack": tech_stack,
             "interest_areas": interest_areas,
             "hours_per_day": float(hours_per_day),
+            "target_company": target_company.lower(),
+            "target_role": target_role.lower(),
+            "target_level": target_level.lower(),
             "is_first_login": True,
             "created_at": now,
             "last_active_at": now,
@@ -525,6 +591,9 @@ def login_user(email, password):
         user["tech_stack"] = _parse_json_field(user["tech_stack"])
         user["interest_areas"] = _parse_json_field(user["interest_areas"])
         user["is_first_login"] = bool(user["is_first_login"])
+        user.setdefault("target_company", "")
+        user.setdefault("target_role", "")
+        user.setdefault("target_level", "")
         return user, None
 
 
@@ -549,6 +618,9 @@ def get_user(user_id):
         user["tech_stack"] = _parse_json_field(user["tech_stack"])
         user["interest_areas"] = _parse_json_field(user["interest_areas"])
         user["is_first_login"] = bool(user["is_first_login"])
+        user.setdefault("target_company", "")
+        user.setdefault("target_role", "")
+        user.setdefault("target_level", "")
         return user
 
 
@@ -928,7 +1000,8 @@ def update_user_profile(user_id, updates):
     if not user:
         return None, "User not found"
 
-    allowed_fields = ["full_name", "tech_stack", "interest_areas", "hours_per_day", "daily_limit"]
+    allowed_fields = ["full_name", "tech_stack", "interest_areas", "hours_per_day", "daily_limit",
+                       "target_company", "target_role", "target_level"]
     for key, value in updates.items():
         if key in allowed_fields:
             if key == "tech_stack" and isinstance(value, str):
@@ -945,10 +1018,14 @@ def update_user_profile(user_id, updates):
     with _get_db() as conn:
         _execute(conn,
             """UPDATE users SET full_name=?, tech_stack=?, interest_areas=?, hours_per_day=?,
-               daily_limit=?, updated_at=? WHERE user_id=?""",
+               daily_limit=?, target_company=?, target_role=?, target_level=?,
+               updated_at=? WHERE user_id=?""",
             (user["full_name"], _json_field(user["tech_stack"]),
              _json_field(user["interest_areas"]), user["hours_per_day"],
-             user.get("daily_limit", 20), now, user_id))
+             user.get("daily_limit", 20),
+             user.get("target_company", ""), user.get("target_role", ""),
+             user.get("target_level", ""),
+             now, user_id))
 
     return user, None
 
@@ -966,6 +1043,9 @@ def get_user_profile(user_id):
         "interest_areas": user.get("interest_areas", []),
         "hours_per_day": user.get("hours_per_day", 2),
         "daily_limit": user.get("daily_limit", 20),
+        "target_company": user.get("target_company", ""),
+        "target_role": user.get("target_role", ""),
+        "target_level": user.get("target_level", ""),
         "created_at": user.get("created_at"),
         "is_first_login": user.get("is_first_login", False),
     }
@@ -1499,4 +1579,82 @@ def get_all_candidates_with_results():
                     result["improvement_areas"] = _parse_json_field(result["improvement_areas"])
                 iv["result"] = result
                 r["interviews"].append(iv)
+        return rows
+
+
+# ─── ELO Ratings (v2) ───
+
+def save_elo_ratings(user_id, overall, sub_elos):
+    """Save or update ELO ratings for a user."""
+    now = datetime.now().isoformat()
+    with _get_db() as conn:
+        existing = _fetchone(conn, "SELECT * FROM elo_ratings WHERE user_id = ?", (user_id,))
+        if existing:
+            _execute(conn,
+                """UPDATE elo_ratings SET overall = ?, phone_screen = ?, system_design = ?,
+                   behavioral = ?, domain_specific = ?, bar_raiser = ?, updated_at = ?
+                   WHERE user_id = ?""",
+                (overall,
+                 sub_elos.get("phone_screen", overall),
+                 sub_elos.get("system_design", overall),
+                 sub_elos.get("behavioral", overall),
+                 sub_elos.get("domain_specific", overall),
+                 sub_elos.get("bar_raiser", overall),
+                 now, user_id))
+        else:
+            _execute(conn,
+                """INSERT INTO elo_ratings (user_id, overall, phone_screen, system_design,
+                   behavioral, domain_specific, bar_raiser, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, overall,
+                 sub_elos.get("phone_screen", overall),
+                 sub_elos.get("system_design", overall),
+                 sub_elos.get("behavioral", overall),
+                 sub_elos.get("domain_specific", overall),
+                 sub_elos.get("bar_raiser", overall),
+                 now))
+
+
+def get_elo_ratings(user_id):
+    """Get ELO ratings for a user. Returns dict or None."""
+    with _get_db() as conn:
+        row = _fetchone(conn, "SELECT * FROM elo_ratings WHERE user_id = ?", (user_id,))
+        if not row:
+            return None
+        r = dict(row)
+        return {
+            "overall": r["overall"],
+            "sub_elos": {
+                "phone_screen": r["phone_screen"],
+                "system_design": r["system_design"],
+                "behavioral": r["behavioral"],
+                "domain_specific": r["domain_specific"],
+                "bar_raiser": r["bar_raiser"],
+            },
+            "updated_at": r["updated_at"],
+        }
+
+
+def add_elo_history(user_id, session_id, session_type, old_elo, new_elo, delta, round_deltas=None):
+    """Record an ELO change in history."""
+    now = datetime.now().isoformat()
+    entry_id = _gen_id()
+    with _get_db() as conn:
+        _execute(conn,
+            """INSERT INTO elo_history (id, user_id, session_id, session_type,
+               old_elo, new_elo, delta, round_deltas, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (entry_id, user_id, session_id or "", session_type,
+             old_elo, new_elo, delta,
+             _json_field(round_deltas or {}), now))
+
+
+def get_elo_history(user_id, limit=50):
+    """Get ELO history for a user, most recent first."""
+    with _get_db() as conn:
+        rows = _fetchall(conn,
+            "SELECT * FROM elo_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit))
+        for r in rows:
+            r["round_deltas"] = _parse_json_field(r["round_deltas"])
         return rows

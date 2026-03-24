@@ -15,6 +15,14 @@ import learning_engine
 import scheduler
 from resume_parser import extract_text, validate_resume_file
 import llm_service
+from company_profiles import (
+    SUPPORTED_COMPANIES, SUPPORTED_ROLES, SUPPORTED_LEVELS,
+    ROLE_LABELS, LEVEL_LABELS, COMPANY_PROFILES,
+    validate_registration_fields, get_company_profile, get_hiring_bar,
+    get_starting_elo, get_round_config,
+)
+from elo_rating import create_initial_elo, check_interview_ready, get_readiness_label
+from gap_map import generate_gap_map
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -83,16 +91,47 @@ def register():
     tech_stack = data.get("tech_stack", [])
     interest_areas = data.get("interest_areas", [])
     hours_per_day = data.get("hours_per_day", 2)
+    target_company = data.get("target_company", "").strip()
+    target_role = data.get("target_role", "").strip()
+    target_level = data.get("target_level", "").strip()
 
     if not full_name or not email:
         return jsonify({"error": "Name and email are required"}), 400
 
-    user, error = storage.register_user(full_name, email, tech_stack, interest_areas, hours_per_day)
+    # v2: Validate company/role/level if provided
+    if target_company or target_role or target_level:
+        if not target_company or not target_role or not target_level:
+            return jsonify({"error": "target_company, target_role, and target_level are all required"}), 400
+        validation_err = validate_registration_fields(target_company, target_role, target_level)
+        if validation_err:
+            return jsonify({"error": validation_err}), 400
+
+    user, error = storage.register_user(
+        full_name, email, tech_stack, interest_areas, hours_per_day,
+        target_company=target_company, target_role=target_role, target_level=target_level,
+    )
     if error:
         return jsonify({"error": error}), 409
 
     # Auto-generate learning plan on registration
     plan, plan_error = learning_engine.generate_learning_plan(user["user_id"])
+
+    # v2: Initialize ELO ratings if target is set
+    elo_data = None
+    gap_map_data = None
+    if target_company and target_role and target_level:
+        starting_elo, _ = get_starting_elo(target_level)
+        if starting_elo:
+            elo_state = create_initial_elo(target_level)
+            storage.save_elo_ratings(user["user_id"], elo_state["overall"], elo_state["sub_elos"])
+            storage.add_elo_history(
+                user["user_id"], None, "registration",
+                0, elo_state["overall"], elo_state["overall"],
+            )
+            elo_data = check_interview_ready(elo_state["overall"], target_company, target_level)
+
+        # Generate gap map
+        gap_map_data, _ = generate_gap_map(tech_stack, target_role, target_level)
 
     token = create_token(user["user_id"], user["email"])
     return jsonify({
@@ -103,6 +142,11 @@ def register():
         "is_first_login": True,
         "token": token,
         "has_plan": plan is not None,
+        "target_company": target_company,
+        "target_role": target_role,
+        "target_level": target_level,
+        "elo": elo_data,
+        "gap_map": gap_map_data,
         "message": "Registration successful. Default password: welcome@123",
     })
 
@@ -181,6 +225,105 @@ def get_tech_stacks():
 @app.route("/api/config/interest-areas", methods=["GET"])
 def get_interest_areas():
     return jsonify(INTEREST_AREAS_OPTIONS)
+
+
+@app.route("/api/config/companies", methods=["GET"])
+def get_companies():
+    """Return supported companies with their profiles."""
+    return jsonify({
+        "companies": SUPPORTED_COMPANIES,
+        "profiles": {c: {"name": COMPANY_PROFILES[c]["name"], "description": COMPANY_PROFILES[c]["description"]}
+                     for c in SUPPORTED_COMPANIES},
+    })
+
+
+@app.route("/api/config/roles", methods=["GET"])
+def get_roles():
+    """Return supported roles with labels."""
+    return jsonify({"roles": SUPPORTED_ROLES, "labels": ROLE_LABELS})
+
+
+@app.route("/api/config/levels", methods=["GET"])
+def get_levels():
+    """Return supported levels with labels."""
+    return jsonify({"levels": SUPPORTED_LEVELS, "labels": LEVEL_LABELS})
+
+
+# ─── ELO & Gap Map (v2) ───
+
+@app.route("/api/elo", methods=["GET"])
+@auth_required
+def get_elo():
+    """Get current ELO ratings, hiring bar, and readiness."""
+    user = storage.get_user(g.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    elo_data = storage.get_elo_ratings(g.user_id)
+    if not elo_data:
+        return jsonify({"error": "No ELO data. Complete registration with target company/role/level."}), 404
+
+    readiness = check_interview_ready(
+        elo_data["overall"],
+        user.get("target_company", "google"),
+        user.get("target_level", "senior"),
+    )
+
+    return jsonify({
+        "overall": elo_data["overall"],
+        "sub_elos": elo_data["sub_elos"],
+        "readiness": readiness,
+        "updated_at": elo_data["updated_at"],
+    })
+
+
+@app.route("/api/elo/history", methods=["GET"])
+@auth_required
+def get_elo_history():
+    """Get ELO history for trend graph."""
+    limit = request.args.get("limit", 50, type=int)
+    history = storage.get_elo_history(g.user_id, limit=limit)
+    return jsonify({"history": history})
+
+
+@app.route("/api/gap-map", methods=["GET"])
+@auth_required
+def get_gap_map():
+    """Get gap map: target role demands vs current tech stack."""
+    user = storage.get_user(g.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    target_role = user.get("target_role")
+    target_level = user.get("target_level")
+    tech_stack = user.get("tech_stack", [])
+
+    if not target_role or not target_level:
+        return jsonify({"error": "No target role/level set. Update profile first."}), 400
+
+    gap_map_data, err = generate_gap_map(tech_stack, target_role, target_level)
+    if err:
+        return jsonify({"error": err}), 400
+
+    return jsonify(gap_map_data)
+
+
+@app.route("/api/company-profile/<company>", methods=["GET"])
+def get_company_profile_endpoint(company):
+    """Get full company profile with round config."""
+    profile, err = get_company_profile(company)
+    if err:
+        return jsonify({"error": err}), 404
+
+    rounds, _ = get_round_config(company)
+
+    return jsonify({
+        "name": profile["name"],
+        "description": profile["description"],
+        "round_weights": profile["round_weights"],
+        "critical_rounds": profile["critical_rounds"],
+        "rounds": rounds,
+    })
 
 
 # ─── Dashboard ───
