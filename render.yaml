@@ -2,15 +2,18 @@ services:
   - type: web
     name: growthpath
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    buildCommand: cd frontend-v2 && npm install && npx vite build && cd ../backend && pip install -r requirements.txt
+    startCommand: cd backend && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: JWT_SECRET
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: NODE_VERSION
+        value: "20"
+      - key: GEMINI_API_KEY
+        sync: false
     disk:
       name: growthpath-data
-      mountPath: /opt/render/project/src/data
+      mountPath: /opt/render/project/src/backend/data
       sizeGB: 1

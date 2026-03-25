@@ -13,6 +13,7 @@ import {
   Star,
   Play,
   BookOpen,
+  CheckCircle,
 } from "lucide-react";
 import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from "@/components/ui/glass-card";
 import { apiFetch } from "@/lib/api";
@@ -134,7 +135,7 @@ export default function DashboardScreen({ onNavigate }: DashboardScreenProps) {
                     <span className="text-slate-300 capitalize">{user.target_level}</span>
                   </p>
                 )}
-                {next_topic ? (
+                {next_topic && (
                   <motion.button
                     onClick={() => onNavigate("learning", { topicId: next_topic.topic_id })}
                     whileHover={{ scale: 1.02 }}
@@ -145,15 +146,16 @@ export default function DashboardScreen({ onNavigate }: DashboardScreenProps) {
                     Continue Learning: {next_topic.title}
                     <ArrowRight className="w-4 h-4" />
                   </motion.button>
-                ) : (
+                )}
+                {user.target_company && (
                   <motion.button
-                    onClick={() => onNavigate("interview")}
+                    onClick={() => onNavigate("mock_interview")}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="mt-3 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+                    className="mt-3 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white shadow-lg shadow-purple-500/20 transition-all flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" />
-                    Start Mock Interview
+                    Start 5-Round Mock Interview
                     <ArrowRight className="w-4 h-4" />
                   </motion.button>
                 )}
@@ -245,6 +247,79 @@ export default function DashboardScreen({ onNavigate }: DashboardScreenProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Quick Assessment Section — shown for all users with a target company */}
+      {user.target_company && (
+        <motion.div variants={itemVariants}>
+          {data.quick_assessment?.taken ? (
+            /* Already taken — show results + retake option */
+            <GlassCard className="p-4 mb-6 border border-emerald-500/20">
+              <GlassCardContent className="px-0">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h3 className="text-white text-sm font-semibold flex items-center gap-2">
+                      Quick Assessment Completed
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {data.quick_assessment.count} attempt{data.quick_assessment.count > 1 ? "s" : ""}
+                      </span>
+                    </h3>
+                    <p className="text-slate-400 text-xs mt-0.5">
+                      Last score: <span className="text-white font-medium">{data.quick_assessment.last_result?.score || 0}%</span>
+                      {" | "}
+                      {data.quick_assessment.last_result?.total_questions || 0} questions
+                      {" | "}
+                      Your ELO was calibrated based on this assessment
+                    </p>
+                  </div>
+                  <motion.button
+                    onClick={() => onNavigate("quick_assessment")}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-5 py-2 rounded-xl text-xs font-semibold bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white border border-slate-600/30 transition-all flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Retake Assessment
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </motion.button>
+                </div>
+              </GlassCardContent>
+            </GlassCard>
+          ) : (
+            /* Not taken yet — prominent prompt */
+            <GlassCard className="p-4 mb-6 border border-amber-500/30 glow-amber">
+              <GlassCardContent className="px-0">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h3 className="text-white text-sm font-semibold">Quick Assessment Required</h3>
+                    <p className="text-slate-400 text-xs mt-0.5">
+                      Take a {user.target_company} Quick Assessment to calibrate your ELO rating and generate a personalized learning path based on your actual strengths and weaknesses.
+                    </p>
+                    <p className="text-amber-400/80 text-[10px] mt-1 font-medium">
+                      5-10 questions | ~10 minutes | Determines your starting ELO
+                    </p>
+                  </div>
+                  <motion.button
+                    onClick={() => onNavigate("quick_assessment")}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Start Assessment
+                    <ArrowRight className="w-4 h-4" />
+                  </motion.button>
+                </div>
+              </GlassCardContent>
+            </GlassCard>
+          )}
+        </motion.div>
+      )}
 
       {/* Score Comparison (ELO over time) */}
       {comparison?.comparisons?.length > 1 && (

@@ -45,7 +45,7 @@ FRONTEND_V2_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend-v2", 
 FRONTEND_LEGACY = os.path.join(os.path.dirname(__file__), "..", "frontend")
 FRONTEND_DIR = FRONTEND_V2_DIST if os.path.isdir(FRONTEND_V2_DIST) else FRONTEND_LEGACY
 
-app = Flask(__name__, static_folder=FRONTEND_DIR)
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 CORS(app)
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "growthpath-secret-key-change-in-production")
@@ -183,6 +183,16 @@ def login():
     if error:
         return jsonify({"error": error}), 401
 
+    # Check if user has taken quick assessment (has any session history)
+    has_taken_assessment = False
+    sessions = storage.get_session_history(user["user_id"]) if hasattr(storage, 'get_session_history') else []
+    if sessions:
+        has_taken_assessment = True
+    else:
+        # Also check ELO history for assessment events
+        elo_history = storage.get_elo_history(user["user_id"]) if hasattr(storage, 'get_elo_history') else []
+        has_taken_assessment = any(h.get("event_type") == "quick_assessment" for h in elo_history) if elo_history else False
+
     token = create_token(user["user_id"], user["email"])
     return jsonify({
         "user_id": user["user_id"],
@@ -190,6 +200,10 @@ def login():
         "full_name": user["full_name"],
         "is_first_login": user.get("is_first_login", False),
         "token": token,
+        "target_company": user.get("target_company", ""),
+        "target_role": user.get("target_role", ""),
+        "target_level": user.get("target_level", ""),
+        "needs_assessment": bool(user.get("target_company")) and not has_taken_assessment,
     })
 
 
@@ -453,11 +467,18 @@ def submit_quick_assessment():
         {rt: c["delta"] for rt, c in elo_result["sub_elos"].items()},
     )
 
-    # Generate learning path from failures
+    # Regenerate and recalibrate learning path from assessment results
     path_generated = False
-    if results["weak_patterns"]:
-        plan, _ = learning_engine.generate_learning_plan(g.user_id)
-        path_generated = plan is not None
+    plan, _ = learning_engine.generate_learning_plan(g.user_id)
+    path_generated = plan is not None
+
+    # Reorder learning path based on weak patterns from assessment
+    if results.get("weak_patterns"):
+        try:
+            company = user.get("target_company", "google")
+            reorder_learning_path(g.user_id, results["weak_patterns"], company)
+        except Exception:
+            pass  # Non-critical — path still exists even if reorder fails
 
     # Finish session with scorecard
     scorecard = {
@@ -599,10 +620,9 @@ def start_targeted_practice():
 
 @app.route("/api/mock/<session_id>/submit", methods=["POST"])
 @auth_required
-def submit_mock_answers():
+def submit_mock_answers(session_id):
     """Submit all answers for a mock interview and get scored results + ELO update."""
     data = request.json
-    session_id = data.get("session_id", session_id)
     answers = data.get("answers", [])
 
     if not answers:

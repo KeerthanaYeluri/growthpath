@@ -143,74 +143,608 @@ QUESTION_TEMPLATES = {
     "domain_specific": {
         "backend": [
             {
-                "question": "Explain the differences between SQL and NoSQL databases. When would you choose one over the other?",
+                "question": "What is a REST API? Explain the key principles and HTTP methods.",
+                "keywords": ["REST", "HTTP", "GET", "POST", "PUT", "DELETE", "stateless", "resource", "endpoint"],
+                "rubric": ["REST principles", "HTTP methods", "Statelessness", "Resource-based design"],
+                "pattern": "API Design", "difficulty": "easy",
+            },
+            {
+                "question": "Explain the difference between SQL and NoSQL databases. When would you choose one over the other?",
                 "keywords": ["relational", "document", "schema", "ACID", "BASE", "scalability", "joins", "denormalization"],
                 "rubric": ["Key differences explained", "Use cases for each", "Trade-offs identified", "Real-world examples"],
-                "pattern": "Database Selection",
-                "difficulty": "medium",
+                "pattern": "Database Selection", "difficulty": "easy",
+            },
+            {
+                "question": "What is an ORM? Explain its benefits and drawbacks with examples.",
+                "keywords": ["ORM", "object relational mapping", "SQLAlchemy", "Hibernate", "N+1", "migration", "query"],
+                "rubric": ["ORM concept", "Benefits", "N+1 problem", "When to use raw SQL"],
+                "pattern": "Database Selection", "difficulty": "easy",
+            },
+            {
+                "question": "Explain authentication vs authorization. How would you implement JWT-based auth?",
+                "keywords": ["authentication", "authorization", "JWT", "token", "refresh", "middleware", "RBAC", "OAuth"],
+                "rubric": ["Clear distinction", "JWT structure", "Token lifecycle", "Security considerations"],
+                "pattern": "Security", "difficulty": "medium",
+            },
+            {
+                "question": "What are microservices? Compare with monolithic architecture and explain when to use each.",
+                "keywords": ["microservices", "monolith", "decoupled", "API gateway", "service discovery", "latency", "deployment"],
+                "rubric": ["Architecture comparison", "Trade-offs", "Communication patterns", "When to migrate"],
+                "pattern": "Architecture Patterns", "difficulty": "medium",
+            },
+            {
+                "question": "Explain database indexing. How do indexes work and when can they hurt performance?",
+                "keywords": ["index", "B-tree", "hash", "composite", "query plan", "write overhead", "selectivity"],
+                "rubric": ["Index types", "How they speed reads", "Write overhead", "When not to index"],
+                "pattern": "Database Selection", "difficulty": "medium",
+            },
+            {
+                "question": "What is caching? Explain cache invalidation strategies and tools like Redis.",
+                "keywords": ["cache", "Redis", "TTL", "LRU", "write-through", "cache-aside", "invalidation", "consistency"],
+                "rubric": ["Caching purpose", "Invalidation strategies", "Redis use cases", "Consistency challenges"],
+                "pattern": "Caching Strategy", "difficulty": "medium",
+            },
+            {
+                "question": "Explain concurrency and multithreading. How do you handle race conditions?",
+                "keywords": ["thread", "process", "mutex", "lock", "deadlock", "race condition", "async", "semaphore"],
+                "rubric": ["Concurrency concepts", "Race condition handling", "Lock mechanisms", "Async patterns"],
+                "pattern": "Concurrency", "difficulty": "medium",
+            },
+            {
+                "question": "What is message queuing? Explain when and how to use Kafka, RabbitMQ, or SQS.",
+                "keywords": ["queue", "Kafka", "RabbitMQ", "async", "producer", "consumer", "dead letter", "at-least-once"],
+                "rubric": ["Queue concepts", "Tool comparison", "Delivery guarantees", "Use cases"],
+                "pattern": "Message Queues", "difficulty": "hard",
+            },
+            {
+                "question": "Design a rate-limited, idempotent payment processing API. What patterns would you use?",
+                "keywords": ["idempotent", "rate limit", "retry", "transaction", "saga", "eventual consistency", "webhook"],
+                "rubric": ["Idempotency design", "Rate limiting approach", "Transaction handling", "Error recovery"],
+                "pattern": "API Design", "difficulty": "hard",
+            },
+            {
+                "question": "Explain the CQRS and Event Sourcing patterns. When would you use them?",
+                "keywords": ["CQRS", "event sourcing", "read model", "write model", "event store", "projection", "eventual consistency"],
+                "rubric": ["Pattern definitions", "When to use", "Trade-offs", "Implementation challenges"],
+                "pattern": "Architecture Patterns", "difficulty": "hard",
+            },
+            {
+                "question": "How would you design a database migration strategy for a high-traffic production system with zero downtime?",
+                "keywords": ["migration", "zero downtime", "backward compatible", "dual write", "shadow", "rollback", "blue-green"],
+                "rubric": ["Migration strategy", "Backward compatibility", "Rollback plan", "Testing approach"],
+                "pattern": "Database Selection", "difficulty": "hard",
             },
         ],
         "frontend": [
             {
-                "question": "Explain the virtual DOM and how it improves performance in React. What are its limitations?",
+                "question": "What is the DOM? Explain how browsers render a web page.",
+                "keywords": ["DOM", "render tree", "CSSOM", "layout", "paint", "reflow", "repaint"],
+                "rubric": ["DOM explanation", "Rendering pipeline", "Reflow vs repaint", "Performance impact"],
+                "pattern": "Browser Fundamentals", "difficulty": "easy",
+            },
+            {
+                "question": "Explain CSS Flexbox and Grid. When would you use one over the other?",
+                "keywords": ["flexbox", "grid", "layout", "responsive", "axis", "gap", "template", "align"],
+                "rubric": ["Flexbox basics", "Grid basics", "Use cases for each", "Responsive design"],
+                "pattern": "CSS Layout", "difficulty": "easy",
+            },
+            {
+                "question": "What is the virtual DOM and how does it improve performance in React?",
                 "keywords": ["virtual DOM", "reconciliation", "diffing", "real DOM", "batch updates", "fiber", "performance"],
-                "rubric": ["Virtual DOM concept", "Diffing algorithm", "Performance benefits", "Limitations and alternatives"],
-                "pattern": "Component Architecture",
-                "difficulty": "medium",
+                "rubric": ["Virtual DOM concept", "Diffing algorithm", "Performance benefits", "Limitations"],
+                "pattern": "Component Architecture", "difficulty": "easy",
+            },
+            {
+                "question": "Explain React hooks. What are useState, useEffect, and useRef? When do you use each?",
+                "keywords": ["useState", "useEffect", "useRef", "hook", "lifecycle", "side effect", "closure", "dependency"],
+                "rubric": ["Hook basics", "useEffect lifecycle", "Dependency array", "Common pitfalls"],
+                "pattern": "Component Architecture", "difficulty": "medium",
+            },
+            {
+                "question": "What is state management? Compare Context API, Redux, and Zustand.",
+                "keywords": ["state", "Redux", "Context", "Zustand", "global state", "store", "action", "reducer"],
+                "rubric": ["State management need", "Tool comparison", "Trade-offs", "When to use each"],
+                "pattern": "State Management", "difficulty": "medium",
+            },
+            {
+                "question": "Explain web accessibility (a11y). What are ARIA roles and how do you test for accessibility?",
+                "keywords": ["a11y", "ARIA", "screen reader", "semantic HTML", "keyboard navigation", "contrast", "WCAG"],
+                "rubric": ["A11y importance", "ARIA usage", "Testing tools", "Common issues"],
+                "pattern": "Accessibility", "difficulty": "medium",
+            },
+            {
+                "question": "How would you optimize the performance of a React application? Explain key techniques.",
+                "keywords": ["memo", "useMemo", "useCallback", "lazy loading", "code splitting", "bundle size", "profiler"],
+                "rubric": ["Memoization techniques", "Code splitting", "Bundle optimization", "Measuring performance"],
+                "pattern": "Performance", "difficulty": "medium",
+            },
+            {
+                "question": "What is server-side rendering (SSR)? Compare SSR, CSR, and SSG with examples.",
+                "keywords": ["SSR", "CSR", "SSG", "Next.js", "hydration", "SEO", "TTFB", "ISR"],
+                "rubric": ["Rendering strategies", "Trade-offs", "SEO impact", "Framework examples"],
+                "pattern": "Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "Explain micro-frontends. How would you design a micro-frontend architecture?",
+                "keywords": ["micro-frontend", "module federation", "iframe", "web components", "routing", "shared state"],
+                "rubric": ["Concept explained", "Implementation approaches", "Communication patterns", "Trade-offs"],
+                "pattern": "Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "How do you handle authentication and security in a single-page application?",
+                "keywords": ["XSS", "CSRF", "JWT", "httpOnly", "CORS", "CSP", "sanitize", "token storage"],
+                "rubric": ["XSS prevention", "Token storage", "CORS setup", "Security headers"],
+                "pattern": "Security", "difficulty": "hard",
             },
         ],
         "fullstack": [
             {
+                "question": "Explain the client-server architecture. How does a web request flow from browser to database and back?",
+                "keywords": ["client", "server", "HTTP", "DNS", "request", "response", "TCP", "database"],
+                "rubric": ["Request flow", "DNS resolution", "Server processing", "Response lifecycle"],
+                "pattern": "Full Stack Architecture", "difficulty": "easy",
+            },
+            {
+                "question": "What is MVC? Explain with an example of how a full-stack app is structured.",
+                "keywords": ["MVC", "model", "view", "controller", "separation", "routing", "template"],
+                "rubric": ["MVC components", "Separation of concerns", "Practical example", "Alternatives"],
+                "pattern": "Full Stack Architecture", "difficulty": "easy",
+            },
+            {
                 "question": "How would you design an authentication system for a web application? Discuss tokens vs sessions.",
                 "keywords": ["JWT", "session", "cookie", "token", "OAuth", "refresh token", "stateless", "XSS", "CSRF"],
                 "rubric": ["Token vs session comparison", "Security considerations", "Implementation approach", "Trade-offs"],
-                "pattern": "Full Stack Architecture",
-                "difficulty": "medium",
+                "pattern": "Full Stack Architecture", "difficulty": "medium",
+            },
+            {
+                "question": "Explain how you would set up a full-stack project with React frontend and Node/Python backend. What tools do you use?",
+                "keywords": ["React", "API", "CORS", "proxy", "build", "deploy", "environment", "testing"],
+                "rubric": ["Project structure", "API communication", "Development workflow", "Deployment strategy"],
+                "pattern": "Full Stack Architecture", "difficulty": "medium",
+            },
+            {
+                "question": "What is GraphQL? Compare it with REST and explain when you would choose one over the other.",
+                "keywords": ["GraphQL", "REST", "query", "mutation", "schema", "over-fetching", "resolver", "subscription"],
+                "rubric": ["GraphQL basics", "REST comparison", "Trade-offs", "Use cases"],
+                "pattern": "API Design", "difficulty": "medium",
+            },
+            {
+                "question": "How do you handle real-time features in a full-stack app? Compare WebSockets, SSE, and polling.",
+                "keywords": ["WebSocket", "SSE", "polling", "real-time", "bidirectional", "connection", "scalability"],
+                "rubric": ["Technology comparison", "Use cases", "Scalability concerns", "Implementation approach"],
+                "pattern": "Full Stack Architecture", "difficulty": "medium",
+            },
+            {
+                "question": "Explain database transactions and ACID properties. How do you handle them in a web application?",
+                "keywords": ["ACID", "transaction", "atomicity", "consistency", "isolation", "durability", "rollback"],
+                "rubric": ["ACID explained", "Transaction management", "Isolation levels", "Error handling"],
+                "pattern": "Database", "difficulty": "medium",
+            },
+            {
+                "question": "How would you design and implement a file upload system that handles large files reliably?",
+                "keywords": ["multipart", "chunked", "S3", "presigned URL", "progress", "retry", "validation", "virus scan"],
+                "rubric": ["Upload strategy", "Large file handling", "Storage choice", "Security validation"],
+                "pattern": "Full Stack Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "Design a full-stack e-commerce checkout flow. Cover frontend, API, payment processing, and error handling.",
+                "keywords": ["checkout", "payment", "cart", "idempotent", "inventory", "webhook", "retry", "UX"],
+                "rubric": ["End-to-end flow", "Payment integration", "Error handling", "UX considerations"],
+                "pattern": "Full Stack Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "How would you implement a multi-tenant SaaS application? Discuss database strategies and isolation.",
+                "keywords": ["multi-tenant", "SaaS", "shared database", "schema per tenant", "isolation", "billing", "security"],
+                "rubric": ["Tenancy models", "Data isolation", "Security approach", "Scaling considerations"],
+                "pattern": "Architecture", "difficulty": "hard",
             },
         ],
         "devops_sre": [
             {
+                "question": "What is DevOps? Explain the key principles and how it differs from traditional software development.",
+                "keywords": ["automation", "CI/CD", "collaboration", "infrastructure as code", "monitoring", "culture", "feedback loop"],
+                "rubric": ["Core principles", "Cultural aspect", "Technical practices", "Benefits explained"],
+                "pattern": "DevOps Fundamentals", "difficulty": "easy",
+            },
+            {
                 "question": "Explain the difference between containers and virtual machines. When would you use each?",
                 "keywords": ["Docker", "container", "VM", "hypervisor", "kernel", "isolation", "overhead", "portability"],
                 "rubric": ["Architecture differences", "Resource overhead comparison", "Use cases", "Security considerations"],
-                "pattern": "Container Orchestration",
-                "difficulty": "medium",
+                "pattern": "Container Orchestration", "difficulty": "easy",
+            },
+            {
+                "question": "What is Docker? Explain images, containers, volumes, and networking basics.",
+                "keywords": ["image", "container", "Dockerfile", "volume", "network", "registry", "layer", "build"],
+                "rubric": ["Image vs container", "Dockerfile basics", "Volume persistence", "Networking modes"],
+                "pattern": "Container Orchestration", "difficulty": "easy",
+            },
+            {
+                "question": "What is a CI/CD pipeline? Explain the stages and why each stage is important.",
+                "keywords": ["build", "test", "deploy", "continuous integration", "continuous delivery", "automation", "artifact", "gate"],
+                "rubric": ["Stage definitions", "Automation benefits", "Quality gates", "Deployment strategies"],
+                "pattern": "CI/CD Pipelines", "difficulty": "easy",
+            },
+            {
+                "question": "Explain Kubernetes architecture. What are pods, services, deployments, and namespaces?",
+                "keywords": ["pod", "service", "deployment", "namespace", "node", "cluster", "control plane", "kubelet"],
+                "rubric": ["Core components", "Pod lifecycle", "Service networking", "Deployment strategies"],
+                "pattern": "Container Orchestration", "difficulty": "medium",
+            },
+            {
+                "question": "What is Infrastructure as Code (IaC)? Compare Terraform and Ansible.",
+                "keywords": ["IaC", "Terraform", "Ansible", "declarative", "imperative", "state", "idempotent", "provider"],
+                "rubric": ["IaC concept", "Declarative vs imperative", "Tool comparison", "State management"],
+                "pattern": "Infrastructure as Code", "difficulty": "medium",
+            },
+            {
+                "question": "Explain monitoring and observability. What are the three pillars and what tools would you use?",
+                "keywords": ["logs", "metrics", "traces", "Prometheus", "Grafana", "ELK", "alerting", "SLO", "SLI"],
+                "rubric": ["Three pillars", "Tool choices", "Alerting strategy", "SLO/SLI concepts"],
+                "pattern": "Monitoring & Observability", "difficulty": "medium",
+            },
+            {
+                "question": "How would you implement a zero-downtime deployment? Explain blue-green and canary strategies.",
+                "keywords": ["blue-green", "canary", "rolling update", "rollback", "health check", "load balancer", "traffic shifting"],
+                "rubric": ["Multiple strategies", "Rollback mechanism", "Health checking", "Traffic management"],
+                "pattern": "CI/CD Pipelines", "difficulty": "medium",
+            },
+            {
+                "question": "What are SLOs, SLIs, and SLAs? How do you define and monitor them for a production service?",
+                "keywords": ["SLO", "SLI", "SLA", "error budget", "availability", "latency", "reliability", "alert"],
+                "rubric": ["Clear definitions", "How to measure", "Error budget concept", "Actionable alerts"],
+                "pattern": "Monitoring & Observability", "difficulty": "medium",
+            },
+            {
+                "question": "Explain incident management. Walk through how you would handle a production outage from detection to postmortem.",
+                "keywords": ["incident", "triage", "severity", "communication", "mitigation", "postmortem", "blameless", "runbook"],
+                "rubric": ["Detection to resolution", "Communication plan", "Severity classification", "Blameless postmortem"],
+                "pattern": "Incident Response", "difficulty": "hard",
+            },
+            {
+                "question": "Design a highly available and scalable CI/CD pipeline for a microservices architecture with 50+ services.",
+                "keywords": ["microservices", "pipeline", "parallel", "artifact", "registry", "GitOps", "ArgoCD", "dependency"],
+                "rubric": ["Pipeline architecture", "Parallelism", "Artifact management", "Dependency handling"],
+                "pattern": "CI/CD Pipelines", "difficulty": "hard",
+            },
+            {
+                "question": "What is chaos engineering? How would you implement it and what tools would you use?",
+                "keywords": ["chaos", "resilience", "fault injection", "Chaos Monkey", "Litmus", "game day", "blast radius", "hypothesis"],
+                "rubric": ["Concept explained", "Tool knowledge", "Experiment design", "Blast radius management"],
+                "pattern": "Reliability Engineering", "difficulty": "hard",
+            },
+            {
+                "question": "How would you design a multi-region disaster recovery strategy? Explain RPO and RTO.",
+                "keywords": ["disaster recovery", "RPO", "RTO", "multi-region", "failover", "replication", "backup", "active-active"],
+                "rubric": ["RPO/RTO definitions", "DR strategies", "Failover mechanisms", "Testing approach"],
+                "pattern": "Reliability Engineering", "difficulty": "hard",
             },
         ],
         "data_engineer": [
             {
+                "question": "What is ETL? Explain the Extract, Transform, Load process with a real example.",
+                "keywords": ["ETL", "extract", "transform", "load", "pipeline", "data warehouse", "staging"],
+                "rubric": ["ETL stages", "Real example", "Tool choices", "Error handling"],
+                "pattern": "Data Pipelines", "difficulty": "easy",
+            },
+            {
+                "question": "Explain the difference between a data warehouse and a data lake. When would you use each?",
+                "keywords": ["warehouse", "data lake", "schema", "structured", "unstructured", "analytics", "cost"],
+                "rubric": ["Clear definitions", "Use cases", "Schema differences", "Cost considerations"],
+                "pattern": "Data Architecture", "difficulty": "easy",
+            },
+            {
+                "question": "What is SQL? Write a query to find the top 5 customers by total order amount.",
+                "keywords": ["SQL", "JOIN", "GROUP BY", "ORDER BY", "aggregate", "subquery", "index"],
+                "rubric": ["Correct query", "Join usage", "Aggregation", "Performance awareness"],
+                "pattern": "SQL", "difficulty": "easy",
+            },
+            {
                 "question": "Explain the difference between batch and stream processing. When would you use each?",
                 "keywords": ["batch", "stream", "real-time", "latency", "throughput", "Kafka", "Spark", "Flink"],
-                "rubric": ["Processing model differences", "Latency vs throughput trade-offs", "Use cases", "Technology choices"],
-                "pattern": "Stream Processing",
-                "difficulty": "medium",
+                "rubric": ["Processing model differences", "Latency vs throughput", "Use cases", "Technology choices"],
+                "pattern": "Stream Processing", "difficulty": "medium",
+            },
+            {
+                "question": "What is Apache Kafka? Explain topics, partitions, consumer groups, and offset management.",
+                "keywords": ["Kafka", "topic", "partition", "consumer group", "offset", "broker", "replication"],
+                "rubric": ["Core concepts", "Partitioning", "Consumer groups", "Offset management"],
+                "pattern": "Stream Processing", "difficulty": "medium",
+            },
+            {
+                "question": "Explain data modeling techniques. What are star schema and snowflake schema?",
+                "keywords": ["star schema", "snowflake", "fact table", "dimension", "normalization", "denormalization"],
+                "rubric": ["Schema types", "Fact vs dimension", "Trade-offs", "Use cases"],
+                "pattern": "Data Modeling", "difficulty": "medium",
+            },
+            {
+                "question": "What is Apache Spark? Explain RDDs, DataFrames, and when to use Spark over MapReduce.",
+                "keywords": ["Spark", "RDD", "DataFrame", "lazy evaluation", "partition", "shuffle", "in-memory"],
+                "rubric": ["Spark architecture", "RDD vs DataFrame", "Lazy evaluation", "Performance benefits"],
+                "pattern": "Big Data Processing", "difficulty": "medium",
+            },
+            {
+                "question": "How do you ensure data quality in a pipeline? What tests and validations would you implement?",
+                "keywords": ["data quality", "validation", "schema check", "null", "duplicate", "freshness", "Great Expectations"],
+                "rubric": ["Quality dimensions", "Validation types", "Tool knowledge", "Monitoring approach"],
+                "pattern": "Data Quality", "difficulty": "medium",
+            },
+            {
+                "question": "Design a data pipeline that ingests clickstream data from a website and makes it available for analytics.",
+                "keywords": ["clickstream", "ingestion", "Kafka", "Spark", "warehouse", "partitioning", "schema evolution"],
+                "rubric": ["Pipeline architecture", "Ingestion strategy", "Storage design", "Query optimization"],
+                "pattern": "Data Pipelines", "difficulty": "hard",
+            },
+            {
+                "question": "Explain data partitioning and bucketing. How do they improve query performance in large datasets?",
+                "keywords": ["partition", "bucket", "Hive", "predicate pushdown", "scan", "skew", "cardinality"],
+                "rubric": ["Partitioning strategy", "Bucketing concept", "Performance impact", "Skew handling"],
+                "pattern": "Data Architecture", "difficulty": "hard",
             },
         ],
         "ml_engineer": [
             {
+                "question": "What is machine learning? Explain supervised, unsupervised, and reinforcement learning with examples.",
+                "keywords": ["supervised", "unsupervised", "reinforcement", "classification", "regression", "clustering", "label"],
+                "rubric": ["Three types explained", "Examples for each", "Use cases", "Key differences"],
+                "pattern": "ML Fundamentals", "difficulty": "easy",
+            },
+            {
+                "question": "Explain the bias-variance trade-off. How does it affect model performance?",
+                "keywords": ["bias", "variance", "trade-off", "overfitting", "underfitting", "complexity", "generalization"],
+                "rubric": ["Clear explanation", "Relationship to fitting", "Visual understanding", "Practical impact"],
+                "pattern": "ML Fundamentals", "difficulty": "easy",
+            },
+            {
+                "question": "What are common evaluation metrics for classification? Explain precision, recall, F1, and AUC.",
+                "keywords": ["precision", "recall", "F1", "AUC", "ROC", "confusion matrix", "threshold"],
+                "rubric": ["Metric definitions", "When to use each", "Trade-offs", "Threshold impact"],
+                "pattern": "Model Evaluation", "difficulty": "easy",
+            },
+            {
                 "question": "Explain overfitting and underfitting. How do you detect and prevent them?",
                 "keywords": ["overfitting", "underfitting", "regularization", "cross-validation", "bias", "variance", "dropout"],
                 "rubric": ["Define both concepts", "Detection methods", "Prevention techniques", "Bias-variance trade-off"],
-                "pattern": "Model Training Pipeline",
-                "difficulty": "medium",
+                "pattern": "Model Training Pipeline", "difficulty": "medium",
+            },
+            {
+                "question": "Explain feature engineering. What techniques do you use to create useful features from raw data?",
+                "keywords": ["feature", "encoding", "scaling", "one-hot", "embedding", "missing values", "feature selection"],
+                "rubric": ["Techniques listed", "Encoding methods", "Handling missing data", "Feature selection"],
+                "pattern": "Feature Engineering", "difficulty": "medium",
+            },
+            {
+                "question": "What is a neural network? Explain layers, activation functions, and backpropagation.",
+                "keywords": ["neural network", "layer", "activation", "ReLU", "sigmoid", "backpropagation", "gradient", "loss"],
+                "rubric": ["Network architecture", "Activation functions", "Backpropagation", "Training process"],
+                "pattern": "Deep Learning", "difficulty": "medium",
+            },
+            {
+                "question": "Explain MLOps. How do you deploy, monitor, and maintain ML models in production?",
+                "keywords": ["MLOps", "deployment", "serving", "monitoring", "drift", "retraining", "pipeline", "CI/CD"],
+                "rubric": ["Deployment strategies", "Monitoring for drift", "Retraining triggers", "Pipeline automation"],
+                "pattern": "Model Serving", "difficulty": "medium",
+            },
+            {
+                "question": "What is transfer learning? Explain when and how to use pre-trained models.",
+                "keywords": ["transfer learning", "pre-trained", "fine-tune", "BERT", "ResNet", "frozen layers", "domain adaptation"],
+                "rubric": ["Concept explained", "When to use", "Fine-tuning approach", "Practical examples"],
+                "pattern": "Deep Learning", "difficulty": "hard",
+            },
+            {
+                "question": "Design an ML system to detect fraudulent transactions in real-time. What's your approach?",
+                "keywords": ["fraud", "real-time", "feature store", "model serving", "threshold", "false positive", "ensemble"],
+                "rubric": ["System architecture", "Feature engineering", "Real-time serving", "Evaluation approach"],
+                "pattern": "ML System Design", "difficulty": "hard",
+            },
+            {
+                "question": "Explain A/B testing for ML models. How do you decide if a new model is better than the existing one?",
+                "keywords": ["A/B test", "statistical significance", "sample size", "metric", "guardrail", "rollout", "confidence"],
+                "rubric": ["Testing methodology", "Statistical rigor", "Metric selection", "Rollout strategy"],
+                "pattern": "Experiment Design", "difficulty": "hard",
             },
         ],
         "mobile": [
             {
+                "question": "What is the mobile app lifecycle? Explain the different states an app goes through.",
+                "keywords": ["lifecycle", "foreground", "background", "suspended", "terminated", "launch", "state"],
+                "rubric": ["Lifecycle states", "State transitions", "Background handling", "Memory management"],
+                "pattern": "Mobile Architecture", "difficulty": "easy",
+            },
+            {
+                "question": "Explain the difference between native, hybrid, and cross-platform mobile development.",
+                "keywords": ["native", "hybrid", "cross-platform", "React Native", "Flutter", "performance", "UI"],
+                "rubric": ["Three approaches", "Performance comparison", "Use cases", "Trade-offs"],
+                "pattern": "Mobile Architecture", "difficulty": "easy",
+            },
+            {
+                "question": "How do you store data locally in a mobile app? Compare different storage options.",
+                "keywords": ["SQLite", "SharedPreferences", "UserDefaults", "Realm", "file storage", "keychain", "encryption"],
+                "rubric": ["Storage options", "When to use each", "Security considerations", "Performance"],
+                "pattern": "Offline Storage", "difficulty": "easy",
+            },
+            {
                 "question": "How do you handle offline functionality in a mobile app? Discuss data synchronization strategies.",
                 "keywords": ["offline", "cache", "sync", "conflict resolution", "local storage", "SQLite", "queue"],
-                "rubric": ["Offline storage approach", "Sync strategy", "Conflict resolution", "User experience considerations"],
-                "pattern": "Offline Storage",
-                "difficulty": "medium",
+                "rubric": ["Offline storage approach", "Sync strategy", "Conflict resolution", "User experience"],
+                "pattern": "Offline Storage", "difficulty": "medium",
+            },
+            {
+                "question": "Explain mobile UI patterns. What are navigation patterns and how do you choose between them?",
+                "keywords": ["tab bar", "drawer", "stack", "modal", "navigation", "deep link", "gesture"],
+                "rubric": ["Navigation patterns", "Platform conventions", "Deep linking", "User experience"],
+                "pattern": "UI Patterns", "difficulty": "medium",
+            },
+            {
+                "question": "How do you optimize mobile app performance? Discuss memory, battery, and network optimization.",
+                "keywords": ["memory", "battery", "network", "lazy loading", "image caching", "profiling", "background"],
+                "rubric": ["Memory management", "Battery optimization", "Network efficiency", "Profiling tools"],
+                "pattern": "Performance Optimization", "difficulty": "medium",
+            },
+            {
+                "question": "What is mobile testing? Explain how you would test a mobile app across different devices.",
+                "keywords": ["unit test", "UI test", "device farm", "emulator", "real device", "regression", "accessibility"],
+                "rubric": ["Testing levels", "Device strategy", "Automation approach", "CI/CD integration"],
+                "pattern": "Mobile Testing", "difficulty": "medium",
+            },
+            {
+                "question": "How do you handle push notifications in a mobile app? Explain the architecture.",
+                "keywords": ["push notification", "FCM", "APNs", "token", "topic", "silent push", "permission"],
+                "rubric": ["Notification architecture", "Token management", "Permission handling", "Delivery reliability"],
+                "pattern": "Mobile Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "Design a mobile app that works seamlessly offline and syncs when connectivity returns.",
+                "keywords": ["offline-first", "CRDT", "queue", "conflict resolution", "delta sync", "retry"],
+                "rubric": ["Offline-first design", "Sync strategy", "Conflict resolution", "UX during sync"],
+                "pattern": "Offline Storage", "difficulty": "hard",
+            },
+            {
+                "question": "How would you architect a mobile app for a million+ daily active users?",
+                "keywords": ["architecture", "MVVM", "clean architecture", "modular", "dependency injection", "scalable"],
+                "rubric": ["Architecture pattern", "Modularity", "Scalability", "Testability"],
+                "pattern": "Mobile Architecture", "difficulty": "hard",
             },
         ],
         "platform": [
             {
-                "question": "How would you design an API that needs to support backward compatibility across multiple versions?",
+                "question": "What is an API? Explain REST, GraphQL, and gRPC. When would you choose each?",
+                "keywords": ["API", "REST", "GraphQL", "gRPC", "protocol buffer", "HTTP", "contract"],
+                "rubric": ["API types", "Comparison", "Use cases", "Trade-offs"],
+                "pattern": "API Design", "difficulty": "easy",
+            },
+            {
+                "question": "What is a distributed system? Explain the key challenges of building distributed systems.",
+                "keywords": ["distributed", "network partition", "consistency", "availability", "latency", "failure"],
+                "rubric": ["Definition", "Key challenges", "CAP theorem", "Practical examples"],
+                "pattern": "Distributed Systems", "difficulty": "easy",
+            },
+            {
+                "question": "Explain DNS and how domain name resolution works step by step.",
+                "keywords": ["DNS", "resolver", "root server", "TLD", "A record", "CNAME", "TTL", "cache"],
+                "rubric": ["Resolution steps", "Record types", "Caching", "Performance impact"],
+                "pattern": "Networking", "difficulty": "easy",
+            },
+            {
+                "question": "How would you design an API that supports backward compatibility across multiple versions?",
                 "keywords": ["versioning", "backward compatible", "deprecation", "migration", "contract", "breaking change"],
-                "rubric": ["Versioning strategy", "Backward compatibility approach", "Deprecation process", "Client migration plan"],
-                "pattern": "SDK Design",
-                "difficulty": "medium",
+                "rubric": ["Versioning strategy", "Backward compatibility", "Deprecation process", "Migration plan"],
+                "pattern": "SDK Design", "difficulty": "medium",
+            },
+            {
+                "question": "Explain service mesh. What is Istio/Envoy and when would you use a service mesh?",
+                "keywords": ["service mesh", "Istio", "Envoy", "sidecar", "mTLS", "traffic management", "observability"],
+                "rubric": ["Service mesh concept", "Sidecar pattern", "Traffic management", "When to use"],
+                "pattern": "Service Mesh", "difficulty": "medium",
+            },
+            {
+                "question": "What is a developer platform? How would you measure developer experience (DX)?",
+                "keywords": ["developer platform", "DX", "SDK", "documentation", "onboarding", "feedback", "metrics"],
+                "rubric": ["Platform definition", "DX metrics", "Onboarding experience", "Feedback loops"],
+                "pattern": "Developer Experience", "difficulty": "medium",
+            },
+            {
+                "question": "Explain multi-tenancy. How would you design a platform that serves multiple teams/customers?",
+                "keywords": ["multi-tenancy", "isolation", "quota", "noisy neighbor", "resource limits", "namespace"],
+                "rubric": ["Tenancy models", "Isolation strategies", "Resource management", "Security"],
+                "pattern": "Platform Architecture", "difficulty": "medium",
+            },
+            {
+                "question": "How would you design a rate limiting and quota system for a platform API?",
+                "keywords": ["rate limit", "quota", "token bucket", "sliding window", "distributed", "fairness"],
+                "rubric": ["Algorithm choice", "Distributed considerations", "Fairness", "User experience"],
+                "pattern": "API Design", "difficulty": "hard",
+            },
+            {
+                "question": "Design an internal platform that enables teams to deploy services with one command.",
+                "keywords": ["platform", "self-service", "abstraction", "template", "guardrails", "automation"],
+                "rubric": ["Platform architecture", "Self-service design", "Guardrails", "Extensibility"],
+                "pattern": "Platform Architecture", "difficulty": "hard",
+            },
+            {
+                "question": "How would you design an SDK for a distributed tracing system? What API would you expose?",
+                "keywords": ["SDK", "tracing", "span", "context propagation", "OpenTelemetry", "sampling", "overhead"],
+                "rubric": ["API design", "Context propagation", "Performance overhead", "Ease of adoption"],
+                "pattern": "SDK Design", "difficulty": "hard",
+            },
+        ],
+        "qa_sdet": [
+            {
+                "question": "What is the testing pyramid? Explain the different levels and their purpose.",
+                "keywords": ["unit", "integration", "e2e", "pyramid", "cost", "speed", "coverage", "maintenance"],
+                "rubric": ["Three levels explained", "Cost vs speed trade-off", "Coverage strategy", "Practical examples"],
+                "pattern": "Test Strategy", "difficulty": "easy",
+            },
+            {
+                "question": "Explain the difference between manual testing and automation testing. When would you choose one over the other?",
+                "keywords": ["manual", "automation", "exploratory", "regression", "ROI", "maintenance", "repeatability"],
+                "rubric": ["Clear distinction", "When to automate", "When manual is better", "ROI considerations"],
+                "pattern": "Test Strategy", "difficulty": "easy",
+            },
+            {
+                "question": "What are the different types of software testing? Give examples of when you would use each.",
+                "keywords": ["functional", "non-functional", "smoke", "regression", "performance", "security", "usability"],
+                "rubric": ["Multiple types listed", "Use cases for each", "Practical examples", "Priority understanding"],
+                "pattern": "Test Strategy", "difficulty": "easy",
+            },
+            {
+                "question": "How do you write a good test case? What makes a test case effective?",
+                "keywords": ["precondition", "steps", "expected result", "independent", "repeatable", "clear", "atomic"],
+                "rubric": ["Test case structure", "Independence", "Clear expected results", "Edge case coverage"],
+                "pattern": "Test Strategy", "difficulty": "easy",
+            },
+            {
+                "question": "What is Selenium? Explain its architecture and how it interacts with browsers.",
+                "keywords": ["WebDriver", "browser driver", "HTTP", "JSON wire protocol", "element", "locator", "grid"],
+                "rubric": ["Architecture explained", "WebDriver role", "Browser interaction", "Grid concept"],
+                "pattern": "Test Automation", "difficulty": "medium",
+            },
+            {
+                "question": "What is Playwright and how does it differ from Selenium? When would you choose one over the other?",
+                "keywords": ["Playwright", "Selenium", "auto-wait", "browser context", "multi-browser", "speed", "modern"],
+                "rubric": ["Key differences", "Auto-wait mechanism", "Performance comparison", "Use case recommendations"],
+                "pattern": "Test Automation", "difficulty": "medium",
+            },
+            {
+                "question": "Explain the Page Object Model design pattern. Why is it important in test automation?",
+                "keywords": ["POM", "page object", "encapsulation", "maintainability", "reusability", "separation of concerns"],
+                "rubric": ["Pattern explained", "Benefits listed", "Maintainability impact", "Example structure"],
+                "pattern": "Test Automation", "difficulty": "medium",
+            },
+            {
+                "question": "How would you design an API test suite for a REST API? What would you test?",
+                "keywords": ["status code", "response body", "headers", "authentication", "edge cases", "contract", "schema"],
+                "rubric": ["Test categories", "Status code validation", "Schema validation", "Negative testing"],
+                "pattern": "API Testing", "difficulty": "medium",
+            },
+            {
+                "question": "What is CI/CD and how does test automation fit into the pipeline?",
+                "keywords": ["continuous integration", "continuous delivery", "pipeline", "trigger", "gates", "parallel", "reporting"],
+                "rubric": ["CI/CD explained", "Test stages in pipeline", "Quality gates", "Reporting and feedback"],
+                "pattern": "CI/CD Integration", "difficulty": "medium",
+            },
+            {
+                "question": "How do you handle flaky tests? What strategies do you use to identify and fix them?",
+                "keywords": ["flaky", "retry", "wait", "isolation", "race condition", "root cause", "quarantine"],
+                "rubric": ["Definition of flaky", "Root cause analysis", "Fix strategies", "Prevention approaches"],
+                "pattern": "Test Automation", "difficulty": "medium",
+            },
+            {
+                "question": "Design a test automation framework from scratch for a web application. What components would you include?",
+                "keywords": ["framework", "page object", "reporting", "config", "data-driven", "logging", "parallel", "reusable"],
+                "rubric": ["Framework layers", "Design patterns used", "Reporting mechanism", "Scalability considerations"],
+                "pattern": "Test Automation", "difficulty": "hard",
+            },
+            {
+                "question": "How would you approach performance testing for a web application? What tools and metrics would you use?",
+                "keywords": ["load test", "stress test", "JMeter", "k6", "Locust", "response time", "throughput", "bottleneck"],
+                "rubric": ["Test types explained", "Tool selection", "Key metrics", "Bottleneck identification"],
+                "pattern": "Performance Testing", "difficulty": "hard",
+            },
+            {
+                "question": "Explain shift-left testing. How would you implement it in an organization that currently tests only at the end?",
+                "keywords": ["shift-left", "early testing", "unit test", "code review", "static analysis", "TDD", "culture"],
+                "rubric": ["Concept explained", "Implementation plan", "Cultural change", "Measurable benefits"],
+                "pattern": "Test Strategy", "difficulty": "hard",
             },
         ],
     },
@@ -218,7 +752,14 @@ QUESTION_TEMPLATES = {
 
 
 def generate_quick_assessment(company, role, level):
-    """Generate 8 questions for Quick Assessment.
+    """Generate 10 questions for Quick Assessment — heavily role-focused.
+
+    Distribution:
+    - 5 domain-specific questions (role-focused, easy → hard)
+    - 2 coding questions (Phone Screen)
+    - 1 system design question
+    - 1 behavioral question
+    - 1 bar raiser / general question
 
     Returns:
         {
@@ -232,10 +773,29 @@ def generate_quick_assessment(company, role, level):
     questions = []
     q_id = 1
 
-    # 3 coding questions (Phone Screen)
+    # 5 domain-specific questions (role-focused — the core of the assessment)
+    role_key = role.lower()
+    domain_qs = list(QUESTION_TEMPLATES["domain_specific"].get(role_key, []))
+    random.shuffle(domain_qs)
+    # Try to pick a mix of difficulties
+    easy = [q for q in domain_qs if q.get("difficulty") == "easy"]
+    medium = [q for q in domain_qs if q.get("difficulty") == "medium"]
+    hard = [q for q in domain_qs if q.get("difficulty") == "hard"]
+    domain_picked = []
+    for pool in [easy[:2], medium[:2], hard[:1]]:
+        domain_picked.extend(pool)
+    # Fill remaining from shuffled pool if not enough
+    remaining_domain = [q for q in domain_qs if q not in domain_picked]
+    while len(domain_picked) < 5 and remaining_domain:
+        domain_picked.append(remaining_domain.pop(0))
+    for q in domain_picked[:5]:
+        questions.append({**q, "id": q_id, "round_type": "domain_specific", "answer_mode": "hybrid"})
+        q_id += 1
+
+    # 2 coding questions (Phone Screen)
     coding_qs = list(QUESTION_TEMPLATES["phone_screen"]["coding"])
     random.shuffle(coding_qs)
-    for q in coding_qs[:3]:
+    for q in coding_qs[:2]:
         questions.append({**q, "id": q_id, "round_type": "phone_screen", "answer_mode": "code"})
         q_id += 1
 
@@ -245,35 +805,29 @@ def generate_quick_assessment(company, role, level):
     questions.append({**design_qs[0], "id": q_id, "round_type": "system_design", "answer_mode": "voice"})
     q_id += 1
 
-    # 2 behavioral questions
+    # 1 behavioral question
     behavioral_qs = list(QUESTION_TEMPLATES["behavioral"]["star"])
     random.shuffle(behavioral_qs)
-    for q in behavioral_qs[:2]:
-        questions.append({**q, "id": q_id, "round_type": "behavioral", "answer_mode": "voice"})
-        q_id += 1
+    questions.append({**behavioral_qs[0], "id": q_id, "round_type": "behavioral", "answer_mode": "voice"})
+    q_id += 1
 
-    # 2 domain-specific questions
-    role_key = role.lower()
-    domain_qs = QUESTION_TEMPLATES["domain_specific"].get(role_key, [])
-    if domain_qs:
-        questions.append({**domain_qs[0], "id": q_id, "round_type": "domain_specific", "answer_mode": "hybrid"})
-        q_id += 1
+    # 1 more domain question if available, else behavioral
+    extra_domain = [q for q in domain_qs if q not in domain_picked]
+    if extra_domain:
+        questions.append({**extra_domain[0], "id": q_id, "round_type": "domain_specific", "answer_mode": "hybrid"})
+    elif len(behavioral_qs) > 1:
+        questions.append({**behavioral_qs[1], "id": q_id, "round_type": "behavioral", "answer_mode": "voice"})
+    q_id += 1
 
-    # Add one more from coding if we need to reach 8
-    remaining_coding = [q for q in coding_qs[3:] if q not in questions]
-    if remaining_coding:
-        questions.append({**remaining_coding[0], "id": q_id, "round_type": "phone_screen", "answer_mode": "code"})
-        q_id += 1
-
-    # Ensure we have at least 7 questions
-    while len(questions) < 7:
-        extra = random.choice(coding_qs)
-        questions.append({**extra, "id": q_id, "round_type": "phone_screen", "answer_mode": "code"})
-        q_id += 1
+    # Shuffle all questions so domain isn't always first
+    random.shuffle(questions)
+    # Re-assign IDs after shuffle
+    for i, q in enumerate(questions):
+        q["id"] = i + 1
 
     return {
-        "questions": questions[:8],
-        "total_questions": len(questions[:8]),
+        "questions": questions[:10],
+        "total_questions": len(questions[:10]),
         "company": company,
         "role": role,
         "level": level,

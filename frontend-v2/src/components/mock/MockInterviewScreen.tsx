@@ -9,6 +9,7 @@ import {
   Lightbulb,
   Code,
   Mic,
+  MicOff,
   Layers,
   AlertTriangle,
   CheckCircle,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import MockResultsView from "@/components/mock/MockResultsView";
+import { useBrowserSpeech } from "@/hooks/useBrowserSpeech";
 
 interface MockInterviewScreenProps {
   onComplete: (results: any) => void;
@@ -56,6 +58,7 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
   const [convComplete, setConvComplete] = useState(false);
   const [hintsUsed, setHintsUsed] = useState(0);
   const timerRef = useRef<any>(null);
+  const { transcript, listening, supported: micSupported, startListening, stopListening, reset: resetSpeech } = useBrowserSpeech();
 
   useEffect(() => {
     apiFetch("/mock/start", { method: "POST" })
@@ -98,6 +101,39 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
     }, 1000);
     return () => clearInterval(timerRef.current);
   }, [currentRound, mockData, results]);
+
+  // Sync speech transcript to answer for voice/hybrid modes
+  useEffect(() => {
+    if (transcript && listening) {
+      const q = mockData?.rounds?.[currentRound]?.questions?.[currentQIdx];
+      if (q && q.answer_mode !== "code") {
+        setAnswers((prev) => ({ ...prev, [q.id]: transcript }));
+      }
+    }
+  }, [transcript, listening, currentRound, currentQIdx, mockData]);
+
+  // Stop listening and auto-speak question when moving between questions/rounds
+  useEffect(() => {
+    if (listening) stopListening();
+    resetSpeech();
+    // Auto-read question aloud for voice/hybrid modes
+    const q = mockData?.rounds?.[currentRound]?.questions?.[currentQIdx];
+    if (q && q.answer_mode !== "code" && "speechSynthesis" in window) {
+      setTimeout(() => speakQuestion(q.question), 500);
+    }
+  }, [currentRound, currentQIdx, mockData]);
+
+  // Read question aloud using browser TTS
+  const speakQuestion = (text: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.95;
+      utter.pitch = 1;
+      utter.lang = "en-US";
+      window.speechSynthesis.speak(utter);
+    }
+  };
 
   const round = mockData?.rounds?.[currentRound];
   const allQsInRound = round?.questions || [];
@@ -375,7 +411,76 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
                   </motion.span>
                 </div>
 
-                <p className="text-white text-base mb-4 leading-relaxed">{currentQ.question}</p>
+                <div className="flex items-start gap-3 mb-4">
+                  <p className="text-white text-base leading-relaxed flex-1">{currentQ.question}</p>
+                  <motion.button
+                    onClick={() => speakQuestion(currentQ.question)}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    title="Listen to question"
+                    className="flex-shrink-0 mt-1 w-8 h-8 rounded-full bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-400 flex items-center justify-center transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                  </motion.button>
+                </div>
+
+                {/* Voice Answer Section for non-code rounds */}
+                {currentQ.answer_mode !== "code" && (
+                  <div className="mb-4 p-4 rounded-xl bg-slate-800/40 border border-purple-500/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-purple-300 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                        <Mic className="w-3.5 h-3.5" />
+                        Voice Answer
+                      </p>
+                      <span className="text-slate-500 text-[10px]">
+                        {currentQ.answer_mode === "voice" ? "Voice recommended" : "Voice or type"}
+                      </span>
+                    </div>
+                    {micSupported ? (
+                      <div className="flex items-center gap-3">
+                        <motion.button
+                          onClick={listening ? stopListening : startListening}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className={cn(
+                            "flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all",
+                            listening
+                              ? "bg-red-500/30 text-red-200 border-2 border-red-500/50 shadow-lg shadow-red-500/20"
+                              : "bg-purple-600/30 text-purple-200 border-2 border-purple-500/40 hover:bg-purple-600/40 shadow-lg shadow-purple-500/20"
+                          )}
+                        >
+                          {listening ? (
+                            <>
+                              <MicOff className="w-5 h-5" />
+                              Stop Recording
+                            </>
+                          ) : (
+                            <>
+                              <Mic className="w-5 h-5" />
+                              Start Speaking
+                            </>
+                          )}
+                        </motion.button>
+                        {listening && (
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-red-300 text-xs font-medium">Recording... Speak now</span>
+                          </div>
+                        )}
+                        {!listening && (answers[currentQ.id] || "").trim() && (
+                          <span className="text-emerald-400 text-xs flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Answer captured
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-amber-400 text-xs">
+                        Voice input not supported in this browser. Please type your answer below.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <textarea
                   value={answers[currentQ.id] || ""}

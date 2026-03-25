@@ -202,7 +202,7 @@ export default function RegisterScreen({ onRegister, onSwitchToLogin }: Register
                 whileTap={{ scale: 0.98 }}
                 className="w-full py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white transition-all shadow-lg shadow-indigo-500/20"
               >
-                Continue to Login
+                Set Password & Continue
               </motion.button>
             </GlassCardContent>
           </GlassCard>

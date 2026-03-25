@@ -34,11 +34,11 @@ ROUND_ANSWER_MODES = {
 
 # Time allocation for 30-minute mock (in minutes)
 ROUND_TIME_ALLOCATION = {
-    "phone_screen": 10,
-    "system_design": 8,
-    "behavioral": 5,
-    "domain_specific": 4,
-    "bar_raiser": 3,
+    "phone_screen": 15,
+    "system_design": 25,
+    "behavioral": 20,
+    "domain_specific": 25,
+    "bar_raiser": 20,
 }
 
 # ──────────────────────────────────────────────
@@ -94,6 +94,7 @@ SUPPORTED_ROLES = [
     "ml_engineer",
     "mobile",
     "platform",
+    "qa_sdet",
 ]
 
 SUPPORTED_LEVELS = ["junior", "mid", "senior", "staff"]
@@ -107,6 +108,7 @@ ROLE_LABELS = {
     "ml_engineer": "ML Engineer",
     "mobile": "Mobile Engineer",
     "platform": "Platform Engineer",
+    "qa_sdet": "QA / SDET",
 }
 
 LEVEL_LABELS = {
@@ -140,27 +142,27 @@ COMPANY_PROFILES = {
                 "key_traits": ["code quality", "optimal solution", "edge cases"],
             },
             "system_design": {
-                "focus": "Large-scale distributed systems, scalability, trade-offs",
-                "question_count": 1,
-                "probe_depth": 5,
+                "focus": "Large-scale distributed systems, scalability, trade-offs — basics to advanced",
+                "question_count": 10,
+                "probe_depth": 3,
                 "key_traits": ["scalability thinking", "trade-off articulation", "component design"],
             },
             "behavioral": {
-                "focus": "Googleyness — collaboration, intellectual humility, comfort with ambiguity",
-                "question_count": 3,
+                "focus": "Googleyness — collaboration, intellectual humility, comfort with ambiguity — basics to advanced",
+                "question_count": 10,
                 "probe_depth": 2,
                 "key_traits": ["collaboration", "humility", "ambiguity handling"],
             },
             "domain_specific": {
-                "focus": "Role-specific technical depth, any programming language",
-                "question_count": 2,
-                "probe_depth": 3,
+                "focus": "Role-specific technical depth from fundamentals to advanced — any programming language",
+                "question_count": 10,
+                "probe_depth": 2,
                 "key_traits": ["technical depth", "real-world application", "best practices"],
             },
             "bar_raiser": {
-                "focus": "Cross-functional thinking, ambiguity handling, big-picture impact",
-                "question_count": 1,
-                "probe_depth": 3,
+                "focus": "Cross-functional thinking, ambiguity handling, big-picture impact — basics to advanced",
+                "question_count": 10,
+                "probe_depth": 2,
                 "key_traits": ["cross-functional impact", "ambiguity navigation", "leadership"],
             },
         },
@@ -203,26 +205,26 @@ COMPANY_PROFILES = {
                 "key_traits": ["code elegance", "design awareness", "edge case handling"],
             },
             "system_design": {
-                "focus": "Design-driven architecture, user experience at the system level",
-                "question_count": 1,
-                "probe_depth": 4,
+                "focus": "Design-driven architecture, user experience at the system level — basics to advanced",
+                "question_count": 10,
+                "probe_depth": 3,
                 "key_traits": ["design thinking", "user-centric architecture", "attention to detail"],
             },
             "behavioral": {
-                "focus": "Craftsmanship, innovation, 'Think Different' mentality, collaboration",
-                "question_count": 3,
-                "probe_depth": 3,
+                "focus": "Craftsmanship, innovation, 'Think Different' mentality — basics to advanced",
+                "question_count": 10,
+                "probe_depth": 2,
                 "key_traits": ["craftsmanship", "innovation mindset", "attention to quality"],
             },
             "domain_specific": {
-                "focus": "Role depth + design quality, Apple ecosystem awareness",
-                "question_count": 2,
-                "probe_depth": 4,
+                "focus": "Role depth + design quality, Apple ecosystem awareness — basics to advanced",
+                "question_count": 10,
+                "probe_depth": 2,
                 "key_traits": ["domain expertise", "design quality", "ecosystem understanding"],
             },
             "bar_raiser": {
-                "focus": "Innovation showcase, 'Think Different' mindset, user empathy",
-                "question_count": 1,
+                "focus": "Innovation showcase, 'Think Different' mindset, user empathy — basics to advanced",
+                "question_count": 10,
                 "probe_depth": 2,
                 "key_traits": ["innovation", "user empathy", "creative problem solving"],
             },
@@ -397,6 +399,24 @@ ROLE_DEMANDS = {
             "staff": ["Platform Strategy", "Cross-Org Infrastructure", "Technical Vision"],
         },
         "cross_cutting": ["Developer Empathy", "Documentation", "Communication", "Reliability Thinking"],
+    },
+    "qa_sdet": {
+        "core_skills": [
+            "Test Strategy & Planning",
+            "Test Automation Frameworks (Selenium/Playwright/Cypress)",
+            "API Testing (REST/GraphQL)",
+            "Programming (Python/Java/JavaScript)",
+            "CI/CD Integration for Testing",
+            "Performance Testing (JMeter/Locust/k6)",
+            "Data Structures & Algorithms",
+        ],
+        "level_additions": {
+            "junior": ["Manual Testing Fundamentals", "Basic Scripting", "Bug Reporting", "Test Case Writing"],
+            "mid": ["Advanced Automation", "Contract Testing", "Mobile Testing", "Test Data Management"],
+            "senior": ["Test Architecture", "Quality Strategy", "Chaos Testing", "Technical Leadership", "Shift-Left Testing"],
+            "staff": ["Org-Wide Quality Strategy", "Test Infrastructure Platforms", "Cross-Team Quality Standards"],
+        },
+        "cross_cutting": ["Attention to Detail", "Root Cause Analysis", "Communication", "Risk Assessment"],
     },
 }
 

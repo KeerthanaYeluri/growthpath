@@ -85,7 +85,7 @@ export default function LoginScreen({ onLogin, onSwitchToRegister }: LoginScreen
                 {error}
               </motion.div>
             )}
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
               <div>
                 <label className="block text-slate-400 text-xs font-medium mb-2 uppercase tracking-wider">Email</label>
                 <div className="relative">
@@ -93,6 +93,7 @@ export default function LoginScreen({ onLogin, onSwitchToRegister }: LoginScreen
                   <input
                     type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com" required
+                    autoComplete="off"
                     className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
                   />
                 </div>
@@ -104,6 +105,7 @@ export default function LoginScreen({ onLogin, onSwitchToRegister }: LoginScreen
                   <input
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password" required
+                    autoComplete="new-password"
                     className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-600 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
                   />
                 </div>

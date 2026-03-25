@@ -834,6 +834,9 @@ def get_dashboard_data(user_id):
             "tech_stack": user["tech_stack"],
             "interest_areas": user["interest_areas"],
             "hours_per_day": user["hours_per_day"],
+            "target_company": user.get("target_company", ""),
+            "target_role": user.get("target_role", ""),
+            "target_level": user.get("target_level", ""),
         },
         "stats": {
             "total_sessions": total_sessions,
@@ -1283,6 +1286,26 @@ def get_enhanced_dashboard_data(user_id):
     base_data["plan_timeline"] = plan_timeline
     base_data["per_topic_ratings"] = per_topic_ratings
     base_data["overall_proficiency"] = overall_proficiency
+
+    # Quick Assessment status
+    sessions = get_user_sessions(user_id)
+    qa_sessions = [s for s in sessions if "quick_assessment" in s.get("role_name", "")]
+    qa_completed = [s for s in qa_sessions if s.get("status") == "completed"]
+    last_qa = None
+    if qa_completed:
+        last = qa_completed[-1]
+        sc = last.get("scorecard", {})
+        last_qa = {
+            "session_id": last.get("session_id", ""),
+            "score": sc.get("overall_score", 0) if sc else 0,
+            "completed_at": last.get("start_time", ""),
+            "total_questions": len(last.get("questions", [])),
+        }
+    base_data["quick_assessment"] = {
+        "taken": len(qa_completed) > 0,
+        "count": len(qa_completed),
+        "last_result": last_qa,
+    }
 
     return base_data
 

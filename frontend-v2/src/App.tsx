@@ -85,19 +85,61 @@ export default function App() {
     }
   };
 
-  const handleRegister = (_data: any) => {
-    // After registration, go to login
-    setAuthState("login");
+  const handleRegister = (data: any) => {
+    // Clear previous user data and auto-login with new user's token
+    clearAuth();
+    if (data.token) {
+      setToken(data.token);
+      setUser(data);
+      setUserState(data);
+      if (data.is_first_login) {
+        setAuthState("change_password");
+      } else {
+        setAuthState("authenticated");
+        setScreen("dashboard");
+      }
+    } else {
+      setAuthState("login");
+    }
   };
 
-  const handlePasswordChanged = () => {
+  const handlePasswordChanged = async () => {
+    // Fetch fresh profile from API to ensure we have correct user data
+    try {
+      const res = await fetch(`${API}/auth/profile`, {
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const profile = await res.json();
+        const u = getUser() || {};
+        // Merge fresh profile data
+        u.is_first_login = false;
+        u.target_company = profile.target_company || u.target_company || "";
+        u.target_role = profile.target_role || u.target_role || "";
+        u.target_level = profile.target_level || u.target_level || "";
+        u.full_name = profile.full_name || u.full_name || "";
+        setUser(u);
+        setUserState(u);
+
+        if (u.target_company) {
+          setAuthState("quick_assessment");
+        } else {
+          setAuthState("authenticated");
+          setScreen("dashboard");
+        }
+        return;
+      }
+    } catch {
+      // Fallback to cached data
+    }
+
+    // Fallback if API fails
     const u = getUser();
     if (u) {
       u.is_first_login = false;
       setUser(u);
       setUserState(u);
     }
-    // v2: Route to Quick Assessment if user has target company set
     if (u && u.target_company) {
       setAuthState("quick_assessment");
     } else {
@@ -123,6 +165,10 @@ export default function App() {
   };
 
   const navigate = (target: string, params: any = {}) => {
+    if (target === "quick_assessment") {
+      setAuthState("quick_assessment");
+      return;
+    }
     setScreenParams(params);
     setScreen(target);
     setError(null);
