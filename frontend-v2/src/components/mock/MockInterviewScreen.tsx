@@ -1,4 +1,20 @@
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Timer,
+  ChevronRight,
+  ChevronLeft,
+  Send,
+  MessageSquare,
+  Lightbulb,
+  Code,
+  Mic,
+  Layers,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card";
+import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import MockResultsView from "@/components/mock/MockResultsView";
@@ -7,6 +23,20 @@ interface MockInterviewScreenProps {
   onComplete: (results: any) => void;
   onNavigate: (screen: string) => void;
 }
+
+const roundColors = [
+  "bg-indigo-500",
+  "bg-purple-500",
+  "bg-cyan-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+];
+
+const answerModeIcons: Record<string, React.ReactNode> = {
+  code: <Code className="w-3 h-3" />,
+  voice: <Mic className="w-3 h-3" />,
+  hybrid: <Layers className="w-3 h-3" />,
+};
 
 export default function MockInterviewScreen({ onComplete, onNavigate }: MockInterviewScreenProps) {
   const [loading, setLoading] = useState(true);
@@ -75,6 +105,9 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
   const totalAnswered = Object.keys(answers).length;
   const totalQs = mockData?.total_questions || 0;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
+  const timerColor =
+    timeLeft < 30 ? "text-red-400" : timeLeft < 60 ? "text-amber-400" : "text-white";
 
   const handleAnswer = (text: string) => {
     if (currentQ) setAnswers((prev) => ({ ...prev, [currentQ.id]: text }));
@@ -185,11 +218,20 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
     setSubmitting(false);
   };
 
+  const isLastQuestion =
+    currentQIdx === allQsInRound.length - 1 &&
+    currentRound === (mockData?.rounds?.length || 1) - 1;
+
   if (loading) return <LoadingSpinner />;
   if (error && !mockData)
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="glass-strong rounded-2xl p-8 max-w-md text-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-strong rounded-2xl p-8 max-w-md text-center"
+        >
+          <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
           <p className="text-red-400 mb-4">{error}</p>
           <button
             onClick={() => onNavigate("dashboard")}
@@ -197,7 +239,7 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
           >
             Back to Dashboard
           </button>
-        </div>
+        </motion.div>
       </div>
     );
 
@@ -220,185 +262,362 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
 
   // Interview in progress
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6 animate-fade-in">
-      {/* Round Indicator */}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="max-w-3xl mx-auto p-4 md:p-6"
+    >
+      {/* Round Indicator - 5 colored segments */}
       <div className="flex items-center gap-1.5 mb-4">
         {mockData.rounds.map((r: any, i: number) => (
-          <div
+          <motion.div
             key={r.round_type}
-            className={`flex-1 h-1.5 rounded-full transition-all ${i < currentRound ? "bg-emerald-500" : i === currentRound ? "bg-indigo-500" : "bg-slate-700"}`}
-          ></div>
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ delay: i * 0.1, duration: 0.4 }}
+            className={cn(
+              "flex-1 h-2 rounded-full origin-left transition-all",
+              i < currentRound
+                ? roundColors[i % roundColors.length]
+                : i === currentRound
+                  ? cn(roundColors[i % roundColors.length], "animate-pulse")
+                  : "bg-slate-700"
+            )}
+          />
         ))}
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="flex items-center justify-between mb-4"
+      >
         <div>
-          <h2 className="text-lg font-bold">{round?.label}</h2>
-          <p className="text-slate-500 text-xs">
-            Round {currentRound + 1}/5 | Q{currentQIdx + 1}/{allQsInRound.length} | {totalAnswered}/{totalQs} total
-          </p>
-        </div>
-        <div className={`glass rounded-xl px-4 py-2 text-center ${timeLeft < 30 ? "border-red-500/50" : ""}`}>
-          <p className={`text-xl font-bold font-mono ${timeLeft < 30 ? "text-red-400" : "text-white"}`}>
-            {formatTime(timeLeft)}
-          </p>
-          <p className="text-slate-500 text-[10px]">{round?.answer_mode} mode</p>
-        </div>
-      </div>
-
-      {currentQ && (
-        <div className="glass-strong rounded-2xl p-6">
-          <div className="flex gap-2 mb-3">
-            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] uppercase">
-              {currentQ.round_type?.replace(/_/g, " ")}
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 text-[10px]">
-              {currentQ.pattern}
-            </span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] ${currentQ.difficulty === "hard" ? "bg-red-500/20 text-red-300" : currentQ.difficulty === "easy" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}
-            >
-              {currentQ.difficulty}
-            </span>
-          </div>
-          <p className="text-white text-base mb-4 leading-relaxed">{currentQ.question}</p>
-          <textarea
-            value={answers[currentQ.id] || ""}
-            onChange={(e) => handleAnswer(e.target.value)}
-            placeholder={
-              currentQ.answer_mode === "code"
-                ? "Write your code/solution here..."
-                : "Explain your answer thoroughly -- show your thinking process..."
-            }
-            rows={currentQ.answer_mode === "code" ? 12 : 8}
-            className={`w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all resize-none ${currentQ.answer_mode === "code" ? "font-mono text-emerald-300" : "text-white"}`}
-          />
-          <div className="flex justify-between items-center mt-1">
-            <p className="text-slate-600 text-[10px]">
-              {(answers[currentQ.id] || "").split(/\s+/).filter(Boolean).length} words
-            </p>
-            <p className="text-slate-600 text-[10px]">
-              {currentQ.answer_mode === "code"
-                ? "Code Editor"
-                : currentQ.answer_mode === "voice"
-                  ? "Voice (text fallback)"
-                  : "Hybrid"}
-            </p>
-          </div>
-
-          {/* AI Interviewer Conversation */}
-          <div className="mt-4 border-t border-slate-700/30 pt-4">
-            {!convKey ? (
-              <button
-                onClick={startConversation}
-                disabled={convLoading || !(answers[currentQ.id] || "").trim()}
-                className="px-4 py-2 rounded-xl text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30"
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            {round?.label}
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={currentRound}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="text-xs text-slate-500 font-normal"
               >
-                {convLoading ? "Starting..." : "Get AI Interviewer Feedback"}
-              </button>
-            ) : (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-purple-300 text-xs font-semibold uppercase tracking-wider">AI Interviewer</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 text-[10px]">Depth: {convDepth}/5</span>
-                    {hintsUsed > 0 && (
-                      <span className="text-amber-400 text-[10px]">
-                        {hintsUsed} hint{hintsUsed > 1 ? "s" : ""} used
-                      </span>
+                Round {currentRound + 1}/5
+              </motion.span>
+            </AnimatePresence>
+          </h2>
+          <p className="text-slate-500 text-xs">
+            Q{currentQIdx + 1}/{allQsInRound.length} | {totalAnswered}/{totalQs} total
+          </p>
+        </div>
+        <motion.div
+          animate={{
+            borderColor: timeLeft < 30 ? "rgba(239,68,68,0.5)" : "transparent",
+          }}
+          className="glass rounded-xl px-4 py-2 text-center border"
+        >
+          <motion.p
+            key={timeLeft}
+            animate={{ color: timeLeft < 30 ? "#f87171" : timeLeft < 60 ? "#fbbf24" : "#ffffff" }}
+            className="text-xl font-bold font-mono flex items-center gap-2"
+          >
+            <Timer className="w-4 h-4" />
+            {formatTime(timeLeft)}
+          </motion.p>
+          <p className="text-slate-500 text-[10px] flex items-center gap-1 justify-center">
+            {answerModeIcons[round?.answer_mode] || null}
+            {round?.answer_mode} mode
+          </p>
+        </motion.div>
+      </motion.div>
+
+      <AnimatePresence mode="wait">
+        {currentQ && (
+          <motion.div
+            key={`${currentRound}-${currentQIdx}`}
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ duration: 0.3 }}
+          >
+            <GlassCard className="p-0">
+              <GlassCardContent className="pt-6">
+                {/* Badges */}
+                <div className="flex gap-2 mb-3 flex-wrap">
+                  <motion.span
+                    whileHover={{ scale: 1.05 }}
+                    className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] uppercase"
+                  >
+                    {currentQ.round_type?.replace(/_/g, " ")}
+                  </motion.span>
+                  <motion.span
+                    whileHover={{ scale: 1.05 }}
+                    className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 text-[10px]"
+                  >
+                    {currentQ.pattern}
+                  </motion.span>
+                  <motion.span
+                    whileHover={{ scale: 1.05 }}
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-[10px]",
+                      currentQ.difficulty === "hard"
+                        ? "bg-red-500/20 text-red-300"
+                        : currentQ.difficulty === "easy"
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : "bg-amber-500/20 text-amber-300"
                     )}
-                    {convComplete && <span className="text-emerald-400 text-[10px]">Complete</span>}
-                  </div>
+                  >
+                    {currentQ.difficulty}
+                  </motion.span>
                 </div>
-                {/* Depth progress */}
-                <div className="flex gap-1 mb-3">
-                  {[1, 2, 3, 4, 5].map((d) => (
-                    <div
-                      key={d}
-                      className={`flex-1 h-1 rounded-full ${d <= convDepth ? "bg-purple-500" : "bg-slate-700"}`}
-                    ></div>
-                  ))}
+
+                <p className="text-white text-base mb-4 leading-relaxed">{currentQ.question}</p>
+
+                <textarea
+                  value={answers[currentQ.id] || ""}
+                  onChange={(e) => handleAnswer(e.target.value)}
+                  placeholder={
+                    currentQ.answer_mode === "code"
+                      ? "Write your code/solution here..."
+                      : "Explain your answer thoroughly -- show your thinking process..."
+                  }
+                  rows={currentQ.answer_mode === "code" ? 12 : 8}
+                  className={cn(
+                    "w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-sm placeholder-slate-600 focus:border-indigo-500/50 transition-all resize-none",
+                    currentQ.answer_mode === "code" ? "font-mono text-emerald-300" : "text-white"
+                  )}
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-slate-600 text-[10px]">
+                    {(answers[currentQ.id] || "").split(/\s+/).filter(Boolean).length} words
+                  </p>
+                  <p className="text-slate-600 text-[10px] flex items-center gap-1">
+                    {currentQ.answer_mode === "code" ? (
+                      <><Code className="w-3 h-3" /> Code Editor</>
+                    ) : currentQ.answer_mode === "voice" ? (
+                      <><Mic className="w-3 h-3" /> Voice (text fallback)</>
+                    ) : (
+                      <><Layers className="w-3 h-3" /> Hybrid</>
+                    )}
+                  </p>
                 </div>
-                {/* Messages */}
-                <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
-                  {convMessages.slice(1).map((msg: any, i: number) => (
-                    <div key={i} className={`flex ${msg.role === "candidate" ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${msg.role === "candidate" ? "bg-indigo-600/20 text-indigo-200" : "bg-slate-800/80 text-slate-300"}`}
-                      >
-                        {msg.isHint && <span className="text-amber-400 text-[9px] block mb-0.5">Hint (-penalty)</span>}
-                        {msg.content}
-                        {msg.quality && (
-                          <span
-                            className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${msg.quality === "strong" ? "bg-emerald-500/20 text-emerald-300" : msg.quality === "average" ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300"}`}
+
+                {/* AI Interviewer Conversation */}
+                <div className="mt-4 border-t border-slate-700/30 pt-4">
+                  {!convKey ? (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={startConversation}
+                      disabled={convLoading || !(answers[currentQ.id] || "").trim()}
+                      className="px-4 py-2 rounded-xl text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30 flex items-center gap-2"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      {convLoading ? "Starting..." : "Get AI Interviewer Feedback"}
+                    </motion.button>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-purple-300 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          AI Interviewer
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500 text-[10px]">Depth: {convDepth}/5</span>
+                          {hintsUsed > 0 && (
+                            <span className="text-amber-400 text-[10px] flex items-center gap-0.5">
+                              <Lightbulb className="w-3 h-3" />
+                              {hintsUsed} hint{hintsUsed > 1 ? "s" : ""} used
+                            </span>
+                          )}
+                          {convComplete && (
+                            <span className="text-emerald-400 text-[10px] flex items-center gap-0.5">
+                              <CheckCircle className="w-3 h-3" /> Complete
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Depth progress */}
+                      <div className="flex gap-1 mb-3">
+                        {[1, 2, 3, 4, 5].map((d) => (
+                          <motion.div
+                            key={d}
+                            initial={{ scaleX: 0 }}
+                            animate={{ scaleX: d <= convDepth ? 1 : 0.3, opacity: d <= convDepth ? 1 : 0.3 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                            className={cn(
+                              "flex-1 h-1 rounded-full origin-left",
+                              d <= convDepth ? "bg-purple-500" : "bg-slate-700"
+                            )}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Messages */}
+                      <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+                        {convMessages.slice(1).map((msg: any, i: number) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: msg.role === "candidate" ? 20 : -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className={`flex ${msg.role === "candidate" ? "justify-end" : "justify-start"}`}
                           >
-                            {msg.quality}
-                          </span>
+                            <div
+                              className={cn(
+                                "max-w-[80%] px-3 py-2 rounded-xl text-xs",
+                                msg.role === "candidate"
+                                  ? "bg-indigo-600/20 text-indigo-200"
+                                  : "bg-slate-800/80 text-slate-300"
+                              )}
+                            >
+                              {msg.isHint && (
+                                <span className="text-amber-400 text-[9px] block mb-0.5 flex items-center gap-0.5">
+                                  <Lightbulb className="w-2.5 h-2.5" /> Hint (-penalty)
+                                </span>
+                              )}
+                              {msg.content}
+                              {msg.quality && (
+                                <span
+                                  className={cn(
+                                    "ml-2 text-[9px] px-1.5 py-0.5 rounded-full",
+                                    msg.quality === "strong"
+                                      ? "bg-emerald-500/20 text-emerald-300"
+                                      : msg.quality === "average"
+                                        ? "bg-amber-500/20 text-amber-300"
+                                        : "bg-red-500/20 text-red-300"
+                                  )}
+                                >
+                                  {msg.quality}
+                                </span>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                        {convLoading && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex justify-start"
+                          >
+                            <div className="bg-slate-800/80 px-3 py-2 rounded-xl text-xs text-slate-500">
+                              Thinking...
+                            </div>
+                          </motion.div>
                         )}
                       </div>
-                    </div>
-                  ))}
-                  {convLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800/80 px-3 py-2 rounded-xl text-xs text-slate-500">Thinking...</div>
+
+                      {/* Response buttons */}
+                      {!convComplete && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="flex gap-2"
+                        >
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => sendToInterviewer(false)}
+                            disabled={convLoading || !(answers[currentQ.id] || "").trim()}
+                            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30 flex items-center gap-1.5"
+                          >
+                            <Send className="w-3 h-3" />
+                            Send Updated Answer
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => sendToInterviewer(true)}
+                            disabled={convLoading}
+                            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-500/20 transition-all disabled:opacity-30 flex items-center gap-1.5"
+                          >
+                            <Lightbulb className="w-3 h-3" />
+                            Get Hint (-penalty)
+                          </motion.button>
+                        </motion.div>
+                      )}
                     </div>
                   )}
                 </div>
-                {/* Response buttons */}
-                {!convComplete && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => sendToInterviewer(false)}
-                      disabled={convLoading || !(answers[currentQ.id] || "").trim()}
-                      className="px-4 py-1.5 rounded-lg text-xs font-medium bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/20 transition-all disabled:opacity-30"
-                    >
-                      Send Updated Answer
-                    </button>
-                    <button
-                      onClick={() => sendToInterviewer(true)}
-                      disabled={convLoading}
-                      className="px-4 py-1.5 rounded-lg text-xs font-medium bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-500/20 transition-all disabled:opacity-30"
-                    >
-                      Get Hint (-penalty)
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+              </GlassCardContent>
+            </GlassCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Navigation */}
-      <div className="flex items-center justify-between mt-4">
-        <button
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        className="flex items-center justify-between mt-4"
+      >
+        <motion.button
+          whileHover={{ x: -2 }}
+          whileTap={{ scale: 0.95 }}
           onClick={handlePrev}
           disabled={currentQIdx === 0 && currentRound === 0}
-          className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white disabled:opacity-30 transition-all"
+          className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white disabled:opacity-30 transition-all flex items-center gap-1"
         >
+          <ChevronLeft className="w-4 h-4" />
           Previous
-        </button>
+        </motion.button>
         <div className="flex gap-2">
           {currentQIdx < allQsInRound.length - 1 || currentRound < mockData.rounds.length - 1 ? (
-            <button
+            <motion.button
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.95 }}
               onClick={handleNext}
-              className="px-6 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all"
+              className="px-6 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all flex items-center gap-1"
             >
-              {currentQIdx < allQsInRound.length - 1 ? "Next Question" : "Next Round ->"}
-            </button>
+              {currentQIdx < allQsInRound.length - 1 ? (
+                <>Next Question <ChevronRight className="w-4 h-4" /></>
+              ) : (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex items-center gap-1"
+                >
+                  Next Round <ChevronRight className="w-4 h-4" />
+                </motion.span>
+              )}
+            </motion.button>
           ) : (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              animate={
+                isLastQuestion
+                  ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 20px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] }
+                  : {}
+              }
+              transition={isLastQuestion ? { duration: 2, repeat: Infinity } : {}}
               onClick={handleSubmitAll}
               disabled={submitting}
-              className="px-6 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
+              className="px-6 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50 flex items-center gap-1.5"
             >
+              <Send className="w-4 h-4" />
               {submitting ? "Evaluating..." : "Submit Mock Interview"}
-            </button>
+            </motion.button>
           )}
         </div>
-      </div>
-      {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
-    </div>
+      </motion.div>
+
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-red-400 text-sm mt-3 flex items-center gap-1.5"
+        >
+          <AlertTriangle className="w-4 h-4" />
+          {error}
+        </motion.p>
+      )}
+    </motion.div>
   );
 }
