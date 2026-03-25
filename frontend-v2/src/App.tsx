@@ -23,8 +23,28 @@ import RateCardsScreen from "@/components/pricing/RateCardsScreen";
 // Dashboard
 import DashboardScreen from "@/components/dashboard/DashboardScreen";
 
-// Stubs for screens being migrated
-import StubScreen from "@/components/stubs/StubScreen";
+// Profile
+import ProfileScreen from "@/components/profile/ProfileScreen";
+
+// History
+import SessionHistoryScreen from "@/components/history/SessionHistoryScreen";
+
+// Learning
+import LearningScreen from "@/components/learning/LearningScreen";
+import TopicAssessmentScreen from "@/components/learning/TopicAssessmentScreen";
+
+// Review
+import ReviewScreen from "@/components/review/ReviewScreen";
+
+// Interview
+import HomeScreen from "@/components/interview/HomeScreen";
+import InterviewRoom from "@/components/interview/InterviewRoom";
+import ResultsPage from "@/components/interview/ResultsPage";
+
+// AI Interview
+import AIInterviewHub from "@/components/ai-interview/AIInterviewHub";
+import AIInterviewRoom from "@/components/ai-interview/AIInterviewRoom";
+import AIResultsScreen from "@/components/ai-interview/AIResultsScreen";
 
 export default function App() {
   const [authState, setAuthState] = useState("checking"); // checking, login, register, change_password, quick_assessment, authenticated
@@ -203,17 +223,40 @@ export default function App() {
       )}
 
       {screen === "dashboard" && <DashboardScreen onNavigate={navigate} />}
-      {screen === "profile" && <StubScreen name="Profile" onNavigate={navigate} />}
-      {screen === "history" && <StubScreen name="Session History" onNavigate={navigate} />}
-      {screen === "learning" && <StubScreen name="Learning Screen" onNavigate={navigate} />}
-      {screen === "assessment" && <StubScreen name="Topic Assessment" onNavigate={navigate} />}
-      {screen === "review" && <StubScreen name="Review & Revisit" onNavigate={navigate} />}
-      {screen === "interview" && <StubScreen name="AI Interview Booth (HomeScreen)" onNavigate={navigate} />}
-      {screen === "interview_room" && <StubScreen name="Interview Room" onNavigate={navigate} />}
-      {screen === "results" && <StubScreen name="Results Page" onNavigate={navigate} />}
-      {screen === "ai_interview" && <StubScreen name="AI Interview Hub" onNavigate={navigate} />}
-      {screen === "ai_interview_room" && <StubScreen name="AI Interview Room" onNavigate={navigate} />}
-      {screen === "ai_results" && <StubScreen name="AI Results Screen" onNavigate={navigate} />}
+      {screen === "profile" && <ProfileScreen onNavigate={navigate} />}
+      {screen === "history" && <SessionHistoryScreen />}
+      {screen === "learning" && <LearningScreen initialTopicId={screenParams.topicId} onNavigate={navigate} />}
+      {screen === "assessment" && (
+        <TopicAssessmentScreen
+          topicId={screenParams.topicId}
+          topicTitle={screenParams.topicTitle}
+          onComplete={() => navigate("learning")}
+          onNavigate={navigate}
+        />
+      )}
+      {screen === "review" && <ReviewScreen onNavigate={navigate} />}
+      {screen === "interview" && <HomeScreen onStart={handleStartInterview} onStartJD={handleStartJDInterview} user={user} />}
+      {screen === "interview_room" && sessionId && (
+        <InterviewRoom sessionId={sessionId} questions={questions} engine={engine} onFinish={handleFinishInterview} />
+      )}
+      {screen === "results" && scorecard && (
+        <ResultsPage
+          scorecard={scorecard}
+          questionReview={questionReview}
+          audioUrls={audioUrls}
+          onRestart={() => navigate("dashboard")}
+          sessionId={sessionId || ""}
+        />
+      )}
+      {screen === "ai_interview" && <AIInterviewHub onNavigate={navigate} />}
+      {screen === "ai_interview_room" && (
+        <AIInterviewRoom
+          interviewId={screenParams.interviewId}
+          evaluateMode={screenParams.evaluate}
+          onNavigate={navigate}
+        />
+      )}
+      {screen === "ai_results" && <AIResultsScreen interviewId={screenParams.interviewId} onNavigate={navigate} />}
       {screen === "mock_interview" && <MockInterviewScreen onComplete={(r: any) => navigate("dashboard")} onNavigate={navigate} />}
       {screen === "pricing" && <RateCardsScreen onNavigate={navigate} />}
     </div>
