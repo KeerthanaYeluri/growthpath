@@ -40,7 +40,10 @@ from path_reorder import (
 )
 from rate_cards import get_rate_cards
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+# Serve built frontend-v2 (Vite dist) if available, else fallback to legacy frontend
+FRONTEND_V2_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend-v2", "dist")
+FRONTEND_LEGACY = os.path.join(os.path.dirname(__file__), "..", "frontend")
+FRONTEND_DIR = FRONTEND_V2_DIST if os.path.isdir(FRONTEND_V2_DIST) else FRONTEND_LEGACY
 
 app = Flask(__name__, static_folder=FRONTEND_DIR)
 CORS(app)
