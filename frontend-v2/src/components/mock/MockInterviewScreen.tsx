@@ -13,6 +13,7 @@ import {
   Layers,
   AlertTriangle,
   CheckCircle,
+  Play,
 } from "lucide-react";
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card";
 import { cn } from "@/lib/utils";
@@ -41,7 +42,8 @@ const answerModeIcons: Record<string, React.ReactNode> = {
 };
 
 export default function MockInterviewScreen({ onComplete, onNavigate }: MockInterviewScreenProps) {
-  const [loading, setLoading] = useState(true);
+  const [confirmed, setConfirmed] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [mockData, setMockData] = useState<any>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState(0);
@@ -60,7 +62,9 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
   const timerRef = useRef<any>(null);
   const { transcript, listening, supported: micSupported, startListening, stopListening, reset: resetSpeech } = useBrowserSpeech();
 
-  useEffect(() => {
+  const startMock = () => {
+    setConfirmed(true);
+    setLoading(true);
     apiFetch("/mock/start", { method: "POST" })
       .then((r) => r.json())
       .then((data) => {
@@ -78,6 +82,10 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
         setError("Cannot start mock interview");
         setLoading(false);
       });
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -258,7 +266,74 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
     currentQIdx === allQsInRound.length - 1 &&
     currentRound === (mockData?.rounds?.length || 1) - 1;
 
-  if (loading) return <LoadingSpinner />;
+  // Pre-interview confirmation screen
+  if (!confirmed)
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-strong rounded-2xl p-8 max-w-lg text-center"
+        >
+          <Play className="w-12 h-12 text-purple-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Ready for Your Mock Interview?</h2>
+          <p className="text-slate-400 text-sm mb-6">
+            This is a full 5-round FAANG-style mock interview with timed rounds and AI interviewer probes.
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-6 text-left">
+            {[
+              { round: "Phone Screen", desc: "2 coding questions", mode: "Text", icon: "1" },
+              { round: "System Design", desc: "10 architecture questions", mode: "Voice", icon: "2" },
+              { round: "Behavioral", desc: "10 STAR-format questions", mode: "Voice", icon: "3" },
+              { round: "Domain Specific", desc: "10 role-specific questions", mode: "Hybrid", icon: "4" },
+              { round: "Bar Raiser", desc: "10 cross-functional questions", mode: "Voice", icon: "5" },
+            ].map((r) => (
+              <div key={r.icon} className="flex items-center gap-3 glass rounded-lg px-3 py-2">
+                <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold flex items-center justify-center">{r.icon}</span>
+                <div className="flex-1">
+                  <span className="text-white text-xs font-medium">{r.round}</span>
+                  <span className="text-slate-500 text-[10px] ml-2">{r.desc}</span>
+                </div>
+                <span className="text-slate-500 text-[10px]">{r.mode}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-slate-500 text-[10px] mb-4">
+            Make sure your microphone is ready for voice rounds. You can also type answers as fallback.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onNavigate("dashboard")}
+              className="px-6 py-3 rounded-xl text-sm font-medium bg-slate-700 hover:bg-slate-600 text-white transition-all"
+            >
+              Not Yet
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={startMock}
+              className="px-8 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-500 hover:from-purple-500 hover:to-indigo-400 text-white shadow-lg shadow-purple-500/20 transition-all flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Start Interview
+            </motion.button>
+          </div>
+        </motion.div>
+      </div>
+    );
+
+  if (loading)
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-4">
+        <LoadingSpinner />
+        <div className="text-center">
+          <p className="text-white text-lg font-semibold mb-1">Preparing Your Mock Interview</p>
+          <p className="text-slate-400 text-sm">Generating role-specific questions across 5 rounds...</p>
+        </div>
+      </div>
+    );
   if (error && !mockData)
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -475,9 +550,15 @@ export default function MockInterviewScreen({ onComplete, onNavigate }: MockInte
                         )}
                       </div>
                     ) : (
-                      <p className="text-amber-400 text-xs">
-                        Voice input not supported in this browser. Please type your answer below.
-                      </p>
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                        <p className="text-amber-400 text-xs font-semibold mb-1">Microphone Not Available</p>
+                        <ul className="text-amber-400/80 text-[10px] space-y-0.5 list-disc list-inside">
+                          <li>Check if your browser has microphone permission — click the lock icon in the address bar</li>
+                          <li>Make sure no other app is using the microphone</li>
+                          <li>Try using Chrome or Edge for best voice support</li>
+                          <li>You can still type your answer in the text box below</li>
+                        </ul>
+                      </div>
                     )}
                   </div>
                 )}

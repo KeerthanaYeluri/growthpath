@@ -32,7 +32,8 @@ const slideVariants = {
 };
 
 export default function QuickAssessmentScreen({ onComplete, onSkip }: QuickAssessmentScreenProps) {
-  const [loading, setLoading] = useState(true);
+  const [started, setStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -43,7 +44,9 @@ export default function QuickAssessmentScreen({ onComplete, onSkip }: QuickAsses
   const [assessmentMeta, setAssessmentMeta] = useState<any>({});
   const [direction, setDirection] = useState<"right" | "left">("right");
 
-  useEffect(() => {
+  const beginAssessment = () => {
+    setStarted(true);
+    setLoading(true);
     apiFetch("/quick-assessment/start", { method: "POST" })
       .then((r) => r.json())
       .then((data) => {
@@ -61,7 +64,7 @@ export default function QuickAssessmentScreen({ onComplete, onSkip }: QuickAsses
         setError("Cannot connect to server");
         setLoading(false);
       });
-  }, []);
+  };
 
   const currentQ = questions[currentIdx];
   const progress = questions.length > 0 ? Math.round(((currentIdx + 1) / questions.length) * 100) : 0;
@@ -110,7 +113,74 @@ export default function QuickAssessmentScreen({ onComplete, onSkip }: QuickAsses
 
   const wordCount = (answers[currentQ?.id] || "").split(/\s+/).filter(Boolean).length;
 
-  if (loading) return <LoadingSpinner />;
+  // Intro screen before assessment starts
+  if (!started)
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-strong rounded-2xl p-8 max-w-lg text-center"
+        >
+          <Brain className="w-12 h-12 text-indigo-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Quick Assessment</h2>
+          <p className="text-slate-400 text-sm mb-4">
+            This short assessment calibrates your starting ELO rating and creates a personalized learning path based on your strengths and weaknesses.
+          </p>
+          <div className="glass rounded-xl p-4 mb-6 text-left space-y-2">
+            <div className="flex items-center gap-2 text-slate-300 text-xs">
+              <Target className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span><strong>10 questions</strong> — mostly specific to your selected role</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300 text-xs">
+              <Clock className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span><strong>~10 minutes</strong> — take your time, no rush</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300 text-xs">
+              <BarChart className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span><strong>ELO calibrated</strong> — your score determines your starting rating</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300 text-xs">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span><strong>Learning path generated</strong> — weak areas become top priority</span>
+            </div>
+          </div>
+          <p className="text-slate-500 text-[10px] mb-4">
+            You can retake this assessment anytime from the Dashboard to recalibrate.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onSkip}
+              className="px-6 py-3 rounded-xl text-sm font-medium bg-slate-700 hover:bg-slate-600 text-white transition-all"
+            >
+              Skip for Now
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={beginAssessment}
+              className="px-8 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+            >
+              <Brain className="w-4 h-4" />
+              Begin Assessment
+            </motion.button>
+          </div>
+        </motion.div>
+      </div>
+    );
+
+  if (loading)
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-4">
+        <LoadingSpinner />
+        <div className="text-center">
+          <p className="text-white text-lg font-semibold mb-1">Preparing Quick Assessment</p>
+          <p className="text-slate-400 text-sm">Generating role-specific questions to calibrate your ELO...</p>
+        </div>
+      </div>
+    );
   if (error && !questions.length)
     return (
       <div className="min-h-screen flex items-center justify-center p-4">

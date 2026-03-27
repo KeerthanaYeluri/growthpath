@@ -102,6 +102,16 @@ export default function MockResultsView({ elo, sc, readiness, mockData, sessionI
       animate="visible"
       className="max-w-3xl mx-auto p-4 md:p-6"
     >
+      {/* Sticky navigation */}
+      <motion.div variants={fadeUp} className="flex justify-end mb-4">
+        <button
+          onClick={() => onNavigate("dashboard")}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium transition-all flex items-center gap-1.5"
+        >
+          Back to Dashboard
+        </button>
+      </motion.div>
+
       {/* Title */}
       <motion.div variants={fadeUp} className="text-center mb-6">
         <Trophy className="w-10 h-10 text-amber-400 mx-auto mb-2" />

@@ -59,13 +59,21 @@ export default function AIResultsScreen({ interviewId, onNavigate }: AIResultsSc
             {interview.interest_area} | {interview.job_role}
           </p>
         </div>
-        <button
-          onClick={() => onNavigate("ai_interview")}
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-1"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Interviews
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onNavigate("ai_interview")}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to Interviews
+          </button>
+          <button
+            onClick={() => onNavigate("dashboard")}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-1"
+          >
+            Dashboard
+          </button>
+        </div>
       </div>
 
       {result && (
