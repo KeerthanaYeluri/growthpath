@@ -100,6 +100,38 @@ def auth_optional(f):
     return decorated
 
 
+def _check_session_ownership(session_id):
+    """Verify current user owns the session. Returns (session, error_response)."""
+    session = storage.get_session(session_id)
+    if not session:
+        return None, (jsonify({"error": "Session not found"}), 404)
+    if session.get("user_id") and session["user_id"] != g.user_id:
+        return None, (jsonify({"error": "Access denied"}), 403)
+    return session, None
+
+
+def _check_interview_ownership(interview_id):
+    """Verify current user owns the AI interview. Returns (interview, error_response)."""
+    interview = storage.get_ai_interview(interview_id)
+    if not interview:
+        return None, (jsonify({"error": "Interview not found"}), 404)
+    if interview.get("user_id") and interview["user_id"] != g.user_id:
+        return None, (jsonify({"error": "Access denied"}), 403)
+    return interview, None
+
+
+def hr_required(f):
+    """Decorator to require HR role. Checks hr_users table. Must be used after @auth_required."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Check if user exists in hr_users table
+        hr_user = storage.get_hr_user(g.user_id) if hasattr(storage, 'get_hr_user') else None
+        if not hr_user:
+            return jsonify({"error": "HR access required"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ─── Auth Endpoints ───
 
 @app.route("/api/auth/register", methods=["POST"])
@@ -542,9 +574,12 @@ def start_mock_interview():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    company = user.get("target_company", "google")
-    role = user.get("target_role", "backend")
-    level = user.get("target_level", "senior")
+    company = user.get("target_company") or ""
+    role = user.get("target_role") or ""
+    level = user.get("target_level") or ""
+
+    if not company or not role or not level:
+        return jsonify({"error": "Set your target company, role, and level in Profile before starting a mock interview"}), 400
 
     result, err = create_mock_session(g.user_id, company, role, level, "full_mock")
     if err:
@@ -628,9 +663,9 @@ def submit_mock_answers(session_id):
     if not answers:
         return jsonify({"error": "answers are required"}), 400
 
-    session = storage.get_session(session_id)
-    if not session:
-        return jsonify({"error": "Session not found"}), 404
+    session, err = _check_session_ownership(session_id)
+    if err:
+        return err
 
     questions = session.get("questions", [])
     role_name = session.get("role_name", "")
@@ -703,6 +738,17 @@ def submit_mock_answers(session_id):
 
 # In-memory conversation states (keyed by session_id + question_id)
 _conversation_states = {}
+_CONVERSATION_TTL = 1800  # 30 minutes
+
+def _cleanup_stale_conversations():
+    """Remove conversations older than TTL."""
+    now = time.time()
+    stale_keys = [
+        k for k, v in _conversation_states.items()
+        if now - v.get("_created_at", 0) > _CONVERSATION_TTL
+    ]
+    for k in stale_keys:
+        _conversation_states.pop(k, None)
 
 @app.route("/api/conversation/start", methods=["POST"])
 @auth_required
@@ -716,8 +762,12 @@ def start_conversation():
     if not session_id or not question.get("id"):
         return jsonify({"error": "session_id and question are required"}), 400
 
+    # Cleanup stale conversations periodically
+    _cleanup_stale_conversations()
+
     conv_key = f"{session_id}_{question['id']}"
     state = create_conversation_state(question, question.get("round_type", "phone_screen"), company)
+    state["_created_at"] = time.time()
     _conversation_states[conv_key] = state
 
     return jsonify({
@@ -798,9 +848,9 @@ def end_conversation():
 @auth_required
 def get_mock_rubric(session_id):
     """Get rubric reveals for all questions in a mock session."""
-    session = storage.get_session(session_id)
-    if not session:
-        return jsonify({"error": "Session not found"}), 404
+    session, err = _check_session_ownership(session_id)
+    if err:
+        return err
 
     questions = session.get("questions", [])
     answers_raw = session.get("answers", [])
@@ -820,9 +870,9 @@ def get_mock_rubric(session_id):
 @auth_required
 def get_hiring_committee(session_id):
     """Get hiring committee simulation for a completed mock."""
-    session = storage.get_session(session_id)
-    if not session:
-        return jsonify({"error": "Session not found"}), 404
+    session, err = _check_session_ownership(session_id)
+    if err:
+        return err
     if session.get("status") != "completed":
         return jsonify({"error": "Mock interview must be completed first"}), 400
 
@@ -924,6 +974,9 @@ def manual_reorder_path():
 @auth_required
 def get_replay(session_id):
     """Get full replay data for a completed mock (read-only, no ELO impact)."""
+    session, ownership_err = _check_session_ownership(session_id)
+    if ownership_err:
+        return ownership_err
     replay, err = get_mock_replay(session_id)
     if err:
         return jsonify({"error": err}), 404
@@ -1128,9 +1181,14 @@ def start_session():
 
 
 @app.route("/api/questions", methods=["GET"])
+@auth_optional
 def get_questions():
     session_id = request.args.get("session_id", "")
     session = storage.get_session(session_id) if session_id else None
+
+    # Verify ownership if session belongs to a user
+    if session and session.get("user_id") and g.user_id and session["user_id"] != g.user_id:
+        return jsonify({"error": "Access denied"}), 403
 
     if session:
         questions = session["questions"]
@@ -1145,9 +1203,13 @@ def get_questions():
 
 
 @app.route("/api/question/<int:question_id>/answer", methods=["GET"])
+@auth_optional
 def get_model_answer(question_id):
     session_id = request.args.get("session_id", "")
     session = storage.get_session(session_id) if session_id else None
+    # Verify ownership
+    if session and session.get("user_id") and g.user_id and session["user_id"] != g.user_id:
+        return jsonify({"error": "Access denied"}), 403
     questions = session["questions"] if session else []
 
     question = next((q for q in questions if q["id"] == question_id), None)
@@ -1559,8 +1621,9 @@ def complete_topic_assessment(topic_id):
     if not results:
         return jsonify({"error": "No assessment results found"}), 404
 
-    avg_score = sum(r.get("score", {}).get("total_score", 0) if isinstance(r.get("score"), dict) else 0 for r in results) / len(results)
-    avg_rating = sum(r.get("rating", 0) for r in results) / len(results)
+    n = len(results) or 1  # Prevent division by zero
+    avg_score = sum(r.get("score", {}).get("total_score", 0) if isinstance(r.get("score"), dict) else 0 for r in results) / n
+    avg_rating = sum(r.get("rating", 0) for r in results) / n
     final_rating = round(avg_rating)
 
     # Mark topic as completed in learning plan
@@ -1916,9 +1979,9 @@ def start_ai_interview(interview_id):
 @auth_required
 def submit_ai_answer(interview_id):
     """Submit answer for current question, get next question or finish."""
-    interview = storage.get_ai_interview(interview_id)
-    if not interview:
-        return jsonify({"error": "Interview not found"}), 404
+    interview, err = _check_interview_ownership(interview_id)
+    if err:
+        return err
     if interview["status"] != "in_progress":
         return jsonify({"error": "Interview not in progress"}), 400
 
@@ -1932,7 +1995,7 @@ def submit_ai_answer(interview_id):
 
     # Get current exchanges to determine position
     exchanges = storage.get_interview_exchanges(interview_id)
-    current_idx = len(exchanges) - 1
+    current_idx = max(0, len(exchanges) - 1)
     questions = interview["questions"]
 
     # Generate AI acknowledgment
@@ -1992,9 +2055,9 @@ def submit_ai_answer(interview_id):
 @auth_required
 def end_ai_interview(interview_id):
     """End interview early."""
-    interview = storage.get_ai_interview(interview_id)
-    if not interview:
-        return jsonify({"error": "Interview not found"}), 404
+    interview, err = _check_interview_ownership(interview_id)
+    if err:
+        return err
     if interview["status"] != "in_progress":
         return jsonify({"error": "Interview not in progress"}), 400
 
@@ -2008,9 +2071,9 @@ def end_ai_interview(interview_id):
 @auth_required
 def evaluate_ai_interview(interview_id):
     """Evaluate all answers in the interview using LLM."""
-    interview = storage.get_ai_interview(interview_id)
-    if not interview:
-        return jsonify({"error": "Interview not found"}), 404
+    interview, err = _check_interview_ownership(interview_id)
+    if err:
+        return err
     if interview["status"] not in ("completed", "evaluated"):
         return jsonify({"error": "Interview must be completed first"}), 400
 
@@ -2155,6 +2218,7 @@ def hr_login():
 
 @app.route("/api/hr/candidates", methods=["GET"])
 @auth_required
+@hr_required
 def hr_get_candidates():
     """Get all candidates with interview results."""
     candidates = storage.get_all_candidates_with_results()
@@ -2163,6 +2227,7 @@ def hr_get_candidates():
 
 @app.route("/api/hr/interview/<interview_id>/results", methods=["GET"])
 @auth_required
+@hr_required
 def hr_get_interview_results(interview_id):
     """Get specific interview results (HR view)."""
     interview = storage.get_ai_interview(interview_id)
